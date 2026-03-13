@@ -1274,13 +1274,17 @@ function renderSubjectiveCol(col, threshold) {
         if (tags.some(t => variantSet.has(t))) matchRows.push(row);
       });
       if (matchRows.length > 0) {
-        const previewCols = columns.filter(c => {
-          if (/^__EMPTY/.test(c)) return false;
-          const cl = c.toLowerCase();
-          if (cl.includes('id')) return false;
-          return c === col || cl.includes('query') || cl.includes('translate_query') || cl.includes('response') || cl.includes('translate_response');
+        // 预览列：当前分析列 + 有实际数据的非空列（排除 __EMPTY 和 ID）
+        const previewCols = [col];
+        columns.forEach(c => {
+          if (c === col) return;
+          if (/^__EMPTY/.test(c)) return;
+          if (c.toLowerCase().includes('id')) return;
+          // 只加入在匹配行中有非空数据的列
+          if (matchRows.some(row => { const v = row[c]; return v !== null && v !== undefined && String(v).trim() !== ''; })) {
+            previewCols.push(c);
+          }
         });
-        if (previewCols.indexOf(col) === -1) previewCols.unshift(col);
         const maxP = Math.min(matchRows.length, 30);
         html += `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;">`;
         html += '<table class="freq-table"><thead><tr><th>#</th>';
