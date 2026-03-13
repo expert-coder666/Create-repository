@@ -1215,6 +1215,76 @@ function extractTags(text) {
   return tags;
 }
 
+// ==================== 主观题分析：同义词词典 ====================
+const SYNONYM_GROUPS = [
+  // 内容质量相关
+  ['事实准确','事实准确性','准确性','事实正确','信息准确','内容准确','事实可靠'],
+  ['逻辑性','逻辑性强','逻辑清晰','逻辑严密','逻辑严谨','推理逻辑','逻辑合理','逻辑连贯'],
+  ['内容深度','深度','有深度','内容有深度','分析深入','深入分析','深度分析','内容深入'],
+  ['内容空洞','空洞','空洞无物','内容空泛','言之无物','缺乏深度','缺少细节','内容浅薄','内容单薄'],
+  ['专业严谨','专业严谨度','专业性','专业度','专业性强','内容专业','专业水平'],
+  ['文学表现力','文学性','文采好','文采','文学功底','文学水平','表现力强'],
+  ['可操作性','实用性','可操作','实用','可执行','实操性','操作性强','实用性强','可落地'],
+  ['多轮记忆','多轮对话记忆','上下文记忆','记忆能力','上下文一致','多轮一致'],
+  ['完整性','内容完整','回答完整','信息完整','内容全面','全面性','覆盖全面','全面'],
+  ['创新性','有创新','新颖','原创','创意','有创意','独到','见解独到','新颖独到'],
+  ['可靠性','信息可靠','内容可信','可信度','权威性','内容权威'],
+  ['准确','正确','无误','精确'],
+  ['幻觉','hallucination','胡说','编造','捏造','虚构事实'],
+  ['冗余','重复','啰嗦','赘述','拖沓'],
+
+  // 表达体验相关
+  ['结构清晰','结构清晰度','结构分明','层次清晰','层次分明','条理清晰','条理分明','结构合理','结构化','组织清晰'],
+  ['阅读负担轻','阅读体验好','易读','可读性','可读性强','易于理解','通俗易懂','好理解','简单易懂','容易理解'],
+  ['高效直给','高效','直给','简洁高效','简洁直接','直奔主题','直接明了'],
+  ['信息密度','信息密度高','密度高','内容紧凑','信息量大','干货多','干货'],
+  ['语言自然','语言自然度','自然度','表达自然','语言流畅','表达流畅','语句流畅','自然流畅','通顺','行文流畅'],
+  ['语气匹配','语气风格匹配','风格匹配','语气合适','风格合适','语气恰当','风格得体','人设匹配','口吻匹配'],
+  ['高情商','情商高','情绪价值','共情','共情能力','情感回应','有温度','有关怀','贴心','温暖'],
+  ['网感','有网感','幽默','有趣','有梗','接地气','活泼'],
+  ['态度鲜明','立场鲜明','态度明确','观点鲜明','观点明确','有态度','立场明确'],
+  ['简洁','精炼','凝练','简练','言简意赅','精简'],
+  ['格式','排版','格式规范','排版美观','格式清晰','markdown规范'],
+  ['清晰','明确','明了','清楚'],
+
+  // 特殊需求处理相关
+  ['安全','安全性','内容安全','安全合规','合规'],
+  ['意图理解','意图识别','理解意图','指令理解','需求理解','理解能力'],
+  ['意图澄清','追问澄清','澄清能力','主动追问','主动澄清'],
+  ['指令遵循','遵循指令','按要求回答','听从指令','指令跟随'],
+  ['拒答','过度拒绝','安全过度','拒绝回答','不必要拒绝'],
+  ['偏见','歧视','不公平','有偏见','刻板印象'],
+  ['隐私','泄露隐私','隐私保护','数据安全','个人信息'],
+  ['纠错能力','纠正错误','识别错误','发现错误','错误识别'],
+  ['能力边界','坦诚局限','诚实回答','承认不足','知识边界'],
+];
+
+// 构建同义词查找映射: tag -> canonical (每组第一个为标准名)
+const SYNONYM_MAP = {};
+SYNONYM_GROUPS.forEach(group => {
+  const canonical = group[0];
+  group.forEach(term => {
+    SYNONYM_MAP[term.toLowerCase().replace(/\s+/g, '')] = canonical.toLowerCase().replace(/\s+/g, '');
+  });
+});
+
+function areSynonyms(a, b) {
+  const na = a.toLowerCase().replace(/\s+/g, '');
+  const nb = b.toLowerCase().replace(/\s+/g, '');
+  // 直接匹配同义词组
+  const ca = SYNONYM_MAP[na];
+  const cb = SYNONYM_MAP[nb];
+  if (ca && cb && ca === cb) return true;
+  // 部分匹配：标签名包含同义词组中的词
+  for (const group of SYNONYM_GROUPS) {
+    const normalizedGroup = group.map(t => t.toLowerCase().replace(/\s+/g, ''));
+    const matchA = normalizedGroup.some(t => na.includes(t) || t.includes(na));
+    const matchB = normalizedGroup.some(t => nb.includes(t) || t.includes(nb));
+    if (matchA && matchB) return true;
+  }
+  return false;
+}
+
 // ==================== 主观题分析：相似度计算 ====================
 function getBigrams(s) {
   const set = new Set();
@@ -1239,6 +1309,8 @@ function jaccardSimilarity(a, b) {
 function isSimilarTag(a, b, threshold) {
   const na = a.toLowerCase().replace(/\s+/g, '');
   const nb = b.toLowerCase().replace(/\s+/g, '');
+  // 同义词词典匹配
+  if (areSynonyms(a, b)) return true;
   // 包含关系
   if (na.includes(nb) || nb.includes(na)) return true;
   return jaccardSimilarity(a, b) >= threshold;
@@ -1279,10 +1351,22 @@ function mergeSimilarTags(tagFreq, threshold) {
     groups[root].totalCount += tagFreq[t];
   });
 
-  // 每组内选频次最高的作为 canonical
+  // 每组内选 canonical：优先用同义词词典中的标准名，否则选频次最高的
   Object.values(groups).forEach(g => {
     g.variants.sort((a, b) => b.count - a.count);
-    g.canonical = g.variants[0].tag;
+    // 查找是否有同义词标准名
+    let bestCanonical = g.variants[0].tag;
+    for (const v of g.variants) {
+      const nv = v.tag.toLowerCase().replace(/\s+/g, '');
+      for (const synGroup of SYNONYM_GROUPS) {
+        const firstNorm = synGroup[0].toLowerCase().replace(/\s+/g, '');
+        if (nv === firstNorm || nv.includes(firstNorm)) {
+          bestCanonical = v.tag;
+          break;
+        }
+      }
+    }
+    g.canonical = bestCanonical;
   });
 
   return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
