@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档数据分析工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh; padding: 20px;
+  color: #333;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+h1 {
+  text-align: center; color: #fff; font-size: 2em; margin-bottom: 20px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.card {
+  background: #fff; border-radius: 16px; padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12); margin-bottom: 20px;
+}
+.card h2 { font-size: 1.2em; color: #5a4fcf; margin-bottom: 16px; }
+
+/* 上传区域 */
+.upload-area {
+  border: 3px dashed #c4b5fd; border-radius: 12px; padding: 48px;
+  text-align: center; cursor: pointer; transition: all 0.3s;
+  background: #faf5ff;
+}
+.upload-area:hover, .upload-area.dragover {
+  border-color: #7c3aed; background: #ede9fe;
+}
+.upload-area .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-area p { color: #6b7280; font-size: 14px; margin-top: 8px; }
+.upload-area .formats { color: #9ca3af; font-size: 12px; margin-top: 4px; }
+input[type="file"] { display: none; }
+
+/* 数据预览表格 */
+.table-wrap {
+  overflow-x: auto; max-height: 400px; overflow-y: auto;
+  border: 1px solid #e5e7eb; border-radius: 8px;
+}
+table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+  white-space: nowrap;
+}
+thead th {
+  background: #7c3aed; color: #fff; padding: 10px 14px;
+  position: sticky; top: 0; z-index: 1; text-align: left;
+  cursor: pointer; user-select: none;
+}
+thead th:hover { background: #6d28d9; }
+thead th.selected { background: #f59e0b; color: #000; }
+tbody td { padding: 8px 14px; border-bottom: 1px solid #f3f4f6; }
+tbody tr:hover { background: #faf5ff; }
+tbody tr:nth-child(even) { background: #f9fafb; }
+tbody tr:nth-child(even):hover { background: #faf5ff; }
+
+/* 列选择面板 */
+.col-selector {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+}
+.col-chip {
+  padding: 6px 16px; border-radius: 20px; font-size: 13px;
+  cursor: pointer; border: 2px solid #e5e7eb; background: #fff;
+  transition: all 0.2s; user-select: none;
+}
+.col-chip:hover { border-color: #7c3aed; }
+.col-chip.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.col-chip.del-mark { background: #dc2626; color: #fff; border-color: #dc2626; text-decoration: line-through; }
+.col-chip.del-mark:hover { background: #b91c1c; border-color: #b91c1c; }
+.col-chip .type-badge {
+  font-size: 10px; background: rgba(0,0,0,0.1); padding: 1px 6px;
+  border-radius: 8px; margin-left: 4px;
+}
+.col-chip.active .type-badge { background: rgba(255,255,255,0.25); }
+
+/* 统计结果 */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px; margin-bottom: 20px;
+}
+.stat-box {
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe); border-radius: 12px;
+  padding: 20px; text-align: center;
+}
+.stat-box .label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-box .value { font-size: 1.6em; font-weight: 700; color: #5b21b6; margin-top: 6px; }
+
+/* 图表容器 */
+.chart-container {
+  background: #faf5ff; border-radius: 12px; padding: 24px; margin-bottom: 20px;
+}
+.chart-container h3 { font-size: 14px; color: #6b7280; margin-bottom: 16px; }
+canvas { width: 100% !important; max-height: 300px; }
+
+/* 频率分布表 */
+.freq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.freq-table th { background: #4b5563; color: #fff; padding: 8px 12px; text-align: left; }
+.freq-table td { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+.freq-bar {
+  height: 16px; background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  border-radius: 4px; min-width: 2px;
+}
+
+/* 按钮 */
+.btn {
+  padding: 8px 20px; border: none; border-radius: 8px;
+  font-size: 14px; cursor: pointer; transition: all 0.2s;
+}
+.btn-primary { background: #7c3aed; color: #fff; }
+.btn-primary:hover { background: #6d28d9; }
+.btn-outline {
+  background: transparent; color: #7c3aed; border: 2px solid #7c3aed;
+}
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-success { background: #059669; color: #fff; }
+.btn-success:hover { background: #047857; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.toolbar .info { font-size: 13px; color: #6b7280; margin-left: auto; }
+
+/* 隐藏区域 */
+.hidden { display: none !important; }
+
+/* 响应式 */
+@media (max-width: 640px) {
+  body { padding: 10px; }
+  .card { padding: 16px; }
+  .upload-area { padding: 32px 16px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 文档数据分析工具</h1>
+
+  <!-- 上传区域 -->
+  <div class="card" id="uploadCard">
+    <div class="upload-area" id="uploadArea">
+      <div class="icon">📁</div>
+      <div><strong>点击上传 或 拖拽文件到此处</strong></div>
+      <p>支持 CSV、Excel (.xlsx/.xls)、JSON 格式</p>
+      <p class="formats">文件不会上传到服务器，所有分析在本地完成</p>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.json,.tsv,.txt">
+  </div>
+
+  <!-- 数据预览 + 列选择 -->
+  <div class="card hidden" id="dataCard">
+    <h2>📋 数据预览</h2>
+    <div class="toolbar">
+      <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
+      <button class="btn btn-primary" onclick="analyzeSelected()">分析选中列</button>
+      <button class="btn btn-outline" onclick="selectAllCols()">全选列</button>
+      <button class="btn btn-outline" onclick="deselectAllCols()">清空选择</button>
+      <span style="color:#e5e7eb;">|</span>
+      <button class="btn btn-outline" id="delModeBtn" onclick="toggleDeleteMode()" style="color:#dc2626;border-color:#dc2626;">删除列模式</button>
+      <button class="btn hidden" id="delConfirmBtn" onclick="confirmDeleteCols()" style="background:#dc2626;color:#fff;">确认删除</button>
+      <button class="btn btn-outline" id="exportBtn" onclick="exportData()" style="color:#059669;border-color:#059669;">导出数据</button>
+      <div class="info" id="dataInfo"></div>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <strong style="font-size:13px; color:#6b7280;" id="colHint">点击列名选择要分析的列：</strong>
+    </div>
+    <div class="col-selector" id="colSelector"></div>
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+
+  <!-- 分析结果 -->
+  <div class="card hidden" id="resultCard">
+    <h2>📈 分析结果</h2>
+    <div id="resultContent"></div>
+  </div>
+
+  </div>
+</div>
+
+<script>
+// ==================== 全局变量 ====================
+let rawData = [];      // [{col1: val, col2: val, ...}, ...]
+let columns = [];      // ['col1', 'col2', ...]
+let selectedCols = new Set();
+let deleteMode = false;
+let deleteCols = new Set();
+let originalFileExt = 'csv';
+let originalFileName = 'data';
+
+// ==================== 文件上传 ====================
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault(); uploadArea.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  originalFileExt = ext;
+  originalFileName = file.name.replace(/\.[^.]+$/, '');
+  if (['xlsx', 'xls'].includes(ext)) {
+    loadSheetJS(() => parseExcel(file));
+  } else if (ext === 'json') {
+    readText(file, parseJSON);
+  } else {
+    readText(file, parseCSV);
+  }
+}
+
+function readText(file, callback) {
+  const reader = new FileReader();
+  reader.onload = e => callback(e.target.result);
+  reader.readAsText(file);
+}
+
+// ==================== 动态加载 SheetJS ====================
+let sheetJSLoaded = false;
+function loadSheetJS(callback) {
+  if (sheetJSLoaded) return callback();
+  const s = document.createElement('script');
+  s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+  s.onload = () => { sheetJSLoaded = true; callback(); };
+  s.onerror = () => alert('加载 Excel 解析库失败，请检查网络');
+  document.head.appendChild(s);
+}
+
+// ==================== 解析器 ====================
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return alert('数据行数不足');
+  // 自动检测分隔符
+  const sep = detectSeparator(lines[0]);
+  const headers = parseCSVLine(lines[0], sep);
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVLine(lines[i], sep);
+    const row = {};
+    headers.forEach((h, j) => row[h] = vals[j] !== undefined ? vals[j] : '');
+    data.push(row);
+  }
+  loadData(headers, data);
+}
+
+function detectSeparator(line) {
+  const counts = { ',': 0, '\t': 0, ';': 0, '|': 0 };
+  for (const ch of line) { if (ch in counts) counts[ch]++; }
+  let best = ',', max = 0;
+  for (const [k, v] of Object.entries(counts)) { if (v > max) { max = v; best = k; } }
+  return best;
+}
+
+function parseCSVLine(line, sep) {
+  const result = []; let current = ''; let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') inQuotes = false;
+      else current += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === sep) { result.push(current.trim()); current = ''; }
+      else current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function parseExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    if (!json.length) return alert('Excel 文件为空');
+    loadData(Object.keys(json[0]), json);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseJSON(text) {
+  try {
+    let data = JSON.parse(text);
+    // 如果是对象包含数组，取第一个数组值
+    if (!Array.isArray(data)) {
+      const arrKey = Object.keys(data).find(k => Array.isArray(data[k]));
+      if (arrKey) data = data[arrKey];
+      else return alert('JSON 中未找到数组数据');
+    }
+    if (!data.length) return alert('数据为空');
+    // 扁平化对象
+    const flat = data.map(item => {
+      if (typeof item !== 'object' || item === null) return { value: item };
+      const obj = {};
+      for (const [k, v] of Object.entries(item)) {
+        obj[k] = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : v;
+      }
+      return obj;
+    });
+    loadData(Object.keys(flat[0]), flat);
+  } catch (e) { alert('JSON 解析失败: ' + e.message); }
+}
+
+// ==================== 加载数据 ====================
+function loadData(headers, data) {
+  columns = headers;
+  rawData = data;
+  selectedCols.clear();
+  document.getElementById('uploadCard').classList.add('hidden');
+  document.getElementById('dataCard').classList.remove('hidden');
+  document.getElementById('resultCard').classList.add('hidden');
+  document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  renderColSelector();
+  renderTable();
+}
+
+function resetAll() {
+  rawData = []; columns = []; selectedCols.clear();
+  deleteMode = false; deleteCols.clear();
+  fileInput.value = '';
+  document.getElementById('uploadCard').classList.remove('hidden');
+  document.getElementById('dataCard').classList.add('hidden');
+  document.getElementById('resultCard').classList.add('hidden');
+}
+
+// ==================== 列选择器 ====================
+function renderColSelector() {
+  const wrap = document.getElementById('colSelector');
+  wrap.innerHTML = '';
+  columns.forEach(col => {
+    const chip = document.createElement('div');
+    if (deleteMode) {
+      chip.className = 'col-chip' + (deleteCols.has(col) ? ' del-mark' : '');
+    } else {
+      chip.className = 'col-chip' + (selectedCols.has(col) ? ' active' : '');
+    }
+    const dtype = detectColType(col);
+    chip.innerHTML = `${col} <span class="type-badge">${dtype === 'num' ? '数值' : '文本'}</span>`;
+    chip.onclick = () => { deleteMode ? toggleDeleteCol(col) : toggleCol(col); };
+    wrap.appendChild(chip);
+  });
+}
+
+function toggleDeleteCol(col) {
+  if (deleteCols.has(col)) deleteCols.delete(col); else deleteCols.add(col);
+  document.getElementById('delConfirmBtn').classList.toggle('hidden', deleteCols.size === 0);
+  renderColSelector();
+}
+
+function toggleCol(col) {
+  if (selectedCols.has(col)) selectedCols.delete(col); else selectedCols.add(col);
+  renderColSelector();
+  updateTableHighlight();
+}
+
+function selectAllCols() { columns.forEach(c => selectedCols.add(c)); renderColSelector(); updateTableHighlight(); }
+function deselectAllCols() { selectedCols.clear(); renderColSelector(); updateTableHighlight(); }
+
+// ==================== 数据预览表格 ====================
+function renderTable() {
+  const wrap = document.getElementById('tableWrap');
+  const maxRows = Math.min(rawData.length, 200);
+  let html = '<table><thead><tr>';
+  columns.forEach(col => {
+    html += `<th onclick="toggleCol('${col.replace(/'/g, "\\'")}')" class="${selectedCols.has(col) ? 'selected' : ''}">${col}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  for (let i = 0; i < maxRows; i++) {
+    html += '<tr>';
+    columns.forEach(col => {
+      const v = rawData[i][col];
+      html += `<td>${v === null || v === undefined ? '' : v}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (rawData.length > 200) html += `<p style="text-align:center;padding:8px;color:#9ca3af;font-size:12px;">仅显示前 200 行，共 ${rawData.length} 行</p>`;
+  wrap.innerHTML = html;
+}
+
+function updateTableHighlight() {
+  const ths = document.querySelectorAll('#tableWrap th');
+  ths.forEach((th, i) => {
+    th.className = selectedCols.has(columns[i]) ? 'selected' : '';
+  });
+}
+
+// ==================== 类型检测 ====================
+function detectColType(col) {
+  let numCount = 0, total = 0;
+  for (const row of rawData) {
+    const v = row[col];
+    if (v === null || v === undefined || v === '') continue;
+    total++;
+    if (!isNaN(Number(v))) numCount++;
+  }
+  return (total > 0 && numCount / total > 0.7) ? 'num' : 'text';
+}
+
+function getNumericValues(col) {
+  return rawData.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '' && !isNaN(Number(v))).map(Number);
+}
+
+function getTextValues(col) {
+  return rawData.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+}
+
+// ==================== 统计计算 ====================
+function calcStats(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const variance = sorted.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+  const std = Math.sqrt(variance);
+  const median = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+  const q1 = sorted[Math.floor(n * 0.25)];
+  const q3 = sorted[Math.floor(n * 0.75)];
+
+  // 众数
+  const freq = {};
+  values.forEach(v => freq[v] = (freq[v] || 0) + 1);
+  let maxFreq = 0, mode = null;
+  for (const [k, c] of Object.entries(freq)) { if (c > maxFreq) { maxFreq = c; mode = Number(k); } }
+
+  return { count: n, sum, mean, median, std, min: sorted[0], max: sorted[n - 1], q1, q3, mode, modeFreq: maxFreq, variance };
+}
+
+function calcTextStats(values) {
+  const freq = {};
+  values.forEach(v => { const s = String(v); freq[s] = (freq[s] || 0) + 1; });
+  const unique = Object.keys(freq).length;
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+  const top10 = sorted.slice(0, 10);
+  return { count: values.length, unique, top10, totalFreq: freq };
+}
+
+// ==================== 分析入口 ====================
+function analyzeSelected() {
+  if (!selectedCols.size) return alert('请先选择要分析的列');
+  const content = document.getElementById('resultContent');
+  content.innerHTML = '';
+  const cols = [...selectedCols];
+
+  // ===== 总结区域 =====
+  const summaryHtml = renderSummary(cols);
+  if (summaryHtml) {
+    const summaryDiv = document.createElement('div');
+    summaryDiv.innerHTML = summaryHtml;
+    content.appendChild(summaryDiv);
+  }
+
+  cols.forEach(col => {
+    const section = document.createElement('div');
+    section.style.marginBottom = '40px';
+    section.style.paddingBottom = '20px';
+    section.style.borderBottom = '1px solid #e5e7eb';
+    const dtype = detectColType(col);
+
+    if (dtype === 'num') {
+      const vals = getNumericValues(col);
+      const stats = calcStats(vals);
+      if (!stats) { section.innerHTML = `<h3>${col}：无有效数据</h3>`; content.appendChild(section); return; }
+      section.innerHTML = renderNumericAnalysis(col, stats, vals);
+    } else {
+      const vals = getTextValues(col);
+      const stats = calcTextStats(vals);
+      section.innerHTML = renderTextAnalysis(col, stats);
+    }
+    content.appendChild(section);
+  });
+
+  document.getElementById('resultCard').classList.remove('hidden');
+  document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ==================== 总结区域 ====================
+function renderSummary(cols) {
+  const total = rawData.length;
+  const textCols = cols.filter(c => detectColType(c) === 'text' && !isCorrectionCol(c));
+  if (!textCols.length) return '';
+
+  // 为每列计算正/负数据
+  const colStats = textCols.map(col => {
+    const labelMap = {};
+    rawData.forEach(row => {
+      const v = row[col];
+      if (v === null || v === undefined || v === '') return;
+      const label = shortLabel(String(v));
+      if (!labelMap[label]) labelMap[label] = { count: 0 };
+      labelMap[label].count++;
+    });
+    const negLabels = Object.entries(labelMap).filter(([l]) => isNegativeValue(l));
+    const posLabels = Object.entries(labelMap).filter(([l]) => !isNegativeValue(l));
+    const negCount = negLabels.reduce((s, [, info]) => s + info.count, 0);
+    const posCount = posLabels.reduce((s, [, info]) => s + info.count, 0);
+
+    // 找关联的备注列：匹配列名中含有相同关键词 + "备注"/"问题"
+    const colKey = col.replace(/是否/g, '');
+    const noteCol = columns.find(c => {
+      if (c === col) return false;
+      return (c.includes('备注') || c.includes('问题')) && colKey.split('').some((_, i, arr) => {
+        const sub = arr.slice(0, i + 2).join('');
+        return sub.length >= 2 && c.includes(sub);
+      });
+    });
+
+    // 从备注列提取负面行的原因（按频率统计）
+    const reasonFreq = {};
+    if (noteCol) {
+      const negLabelSet = new Set(negLabels.map(([l]) => l));
+      rawData.forEach(row => {
+        const v = row[col];
+        if (v === null || v === undefined || v === '') return;
+        if (!negLabelSet.has(shortLabel(String(v)))) return;
+        const note = row[noteCol];
+        if (note && String(note).trim()) {
+          const r = shortLabel(String(note)).trim();
+          if (r) reasonFreq[r] = (reasonFreq[r] || 0) + 1;
+        }
+      });
+    }
+    // 如果备注列没提取到，回退到冒号后的原因
+    if (!Object.keys(reasonFreq).length) {
+      negLabels.forEach(([label]) => {
+        rawData.forEach(row => {
+          const v = row[col];
+          if (v === null || v === undefined) return;
+          if (shortLabel(String(v)) !== label) return;
+          const s = String(v);
+          const ci = s.indexOf(':');
+          const ci2 = s.indexOf('：');
+          const idx = ci > 0 ? ci : ci2;
+          if (idx > 0) {
+            const reason = s.substring(idx + 1).trim();
+            if (reason) reasonFreq[reason] = (reasonFreq[reason] || 0) + 1;
+          }
+        });
+      });
+    }
+    // 按频率排序，取 Top 原因
+    const negReasonsSorted = Object.entries(reasonFreq).sort((a, b) => b[1] - a[1]);
+
+    return { col, posCount, negCount, negReasons: negReasonsSorted };
+  });
+
+  // 第一列的正数据量作为后续列的分母
+  const firstPos = colStats.length > 0 ? colStats[0].posCount : total;
+
+  let lines = [];
+  colStats.forEach((cs, i) => {
+    const colShort = cs.col.replace(/是否.*/, '');
+    const posLabel = cs.negCount > 0 ? getPositiveLabel(cs.col) : '';
+    const negLabel = cs.negCount > 0 ? getNegativeLabel(cs.col) : '';
+    const denom = i === 0 ? total : firstPos;
+    const rate = (cs.posCount / denom * 100).toFixed(2);
+    const rateName = i === 0 ? `${colShort}有效率` : `${colShort}正确率`;
+
+    let line = '';
+    if (i === 0) {
+      line = `总数据量 <strong>${total}</strong>`;
+    }
+    if (cs.negCount > 0) {
+      if (i === 0) {
+        line += `，${posLabel}数据 <strong>${cs.posCount}</strong> 条，<span style="color:#dc2626;">${negLabel}数据 <strong>${cs.negCount}</strong> 条</span>`;
+      } else {
+        line = `${colShort}${posLabel} <strong>${cs.posCount}</strong> 条，<span style="color:#dc2626;">${negLabel} <strong>${cs.negCount}</strong> 条</span>`;
+      }
+      if (cs.negReasons.length) {
+        const topReasons = cs.negReasons.slice(0, 5).map(([r, cnt]) => {
+          const display = r.length > 15 ? r.substring(0, 15) + '…' : r;
+          return `${display}(${cnt}条)`;
+        });
+        line += `，主要原因：${topReasons.join('、')}`;
+        if (cs.negReasons.length > 5) line += `等${cs.negReasons.length}类`;
+      }
+      line += `。<strong style="color:#059669;">${rateName} ${rate}%</strong>（${cs.posCount}/${denom}）`;
+    } else {
+      if (i > 0) line = `${colShort}全部${posLabel || '通过'}`;
+      line += `。<strong style="color:#059669;">${rateName} 100%</strong>（${cs.posCount}/${denom}）`;
+    }
+    lines.push(line);
+  });
+
+  // 整体有效率：所有列都为正面值的行数
+  if (colStats.length > 1) {
+    const allPosRows = rawData.filter(row => {
+      return colStats.every(cs => {
+        const v = row[cs.col];
+        if (v === null || v === undefined || v === '') return false;
+        return !isNegativeValue(shortLabel(String(v)));
+      });
+    });
+    const overallRate = (allPosRows.length / total * 100).toFixed(2);
+    lines.push(`所有维度均通过的数据 <strong>${allPosRows.length}</strong> 条，<strong style="color:#059669;">整体有效率 ${overallRate}%</strong>（${allPosRows.length}/${total}）`);
+  }
+
+  let html = `<div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-radius:12px;padding:24px;margin-bottom:32px;border-left:4px solid #0284c7;">`;
+  html += `<h3 style="font-size:16px;color:#0369a1;margin-bottom:16px;">📋 分析总结</h3>`;
+  html += '<ol style="margin:0;padding-left:20px;line-height:2;font-size:14px;color:#333;">';
+  lines.forEach(line => html += `<li>${line}</li>`);
+  html += '</ol></div>';
+  return html;
+}
+
+function getPositiveLabel(col) {
+  if (col.includes('合理')) return '合理';
+  if (col.includes('正确')) return '正确';
+  if (col.includes('完整')) return '完整';
+  if (col.includes('通过')) return '通过';
+  return '正常';
+}
+function getNegativeLabel(col) {
+  if (col.includes('合理')) return '不合理';
+  if (col.includes('正确')) return '错误';
+  if (col.includes('完整')) return '不完整';
+  if (col.includes('通过')) return '不通过';
+  return '异常';
+}
+
+// ==================== 渲染：数值列分析 ====================
+function renderNumericAnalysis(col, stats, vals) {
+  const fmt = v => {
+    if (v === null || v === undefined) return '-';
+    if (Number.isInteger(v)) return v.toLocaleString();
+    return Number(v.toFixed(4)).toLocaleString();
+  };
+
+  let html = `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:12px;">📊 ${col} <span style="font-size:12px;color:#9ca3af;">（数值列）</span></h3>`;
+
+  // 基础统计卡片
+  html += '<div class="stats-grid">';
+  const items = [
+    ['总数', stats.count], ['求和', fmt(stats.sum)], ['均值', fmt(stats.mean)],
+    ['中位数', fmt(stats.median)], ['标准差', fmt(stats.std)], ['方差', fmt(stats.variance)],
+    ['最小值', fmt(stats.min)], ['最大值', fmt(stats.max)],
+    ['Q1 (25%)', fmt(stats.q1)], ['Q3 (75%)', fmt(stats.q3)],
+    ['众数', `${fmt(stats.mode)} (${stats.modeFreq}次)`], ['唯一值', new Set(vals).size]
+  ];
+  items.forEach(([label, value]) => {
+    html += `<div class="stat-box"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+  });
+  html += '</div>';
+
+  // 频率分布直方图
+  html += renderHistogram(col, vals);
+
+  return html;
+}
+
+function renderHistogram(col, vals) {
+  const n = vals.length;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  if (min === max) return '<p style="color:#9ca3af;font-size:13px;">所有值相同，无法绘制分布图</p>';
+
+  const binCount = Math.min(20, Math.max(5, Math.ceil(Math.sqrt(n))));
+  const binWidth = (max - min) / binCount;
+  const bins = new Array(binCount).fill(0);
+  vals.forEach(v => {
+    let idx = Math.floor((v - min) / binWidth);
+    if (idx >= binCount) idx = binCount - 1;
+    bins[idx]++;
+  });
+  const maxBin = Math.max(...bins);
+
+  let html = '<div class="chart-container"><h3>频率分布</h3>';
+  html += '<div style="display:flex;align-items:flex-end;height:180px;gap:2px;padding:0 4px;">';
+  bins.forEach((count, i) => {
+    const h = maxBin > 0 ? (count / maxBin * 160) : 0;
+    const lo = (min + i * binWidth).toFixed(1);
+    const hi = (min + (i + 1) * binWidth).toFixed(1);
+    html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="${lo} ~ ${hi}: ${count}">`;
+    html += `<div style="font-size:10px;color:#6b7280;margin-bottom:2px;">${count}</div>`;
+    html += `<div style="width:100%;height:${h}px;background:linear-gradient(180deg,#7c3aed,#a78bfa);border-radius:3px 3px 0 0;min-height:${count > 0 ? 2 : 0}px;"></div>`;
+    html += '</div>';
+  });
+  html += '</div>';
+  // x轴标签
+  html += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;margin-top:4px;padding:0 4px;">';
+  html += `<span>${min.toFixed(1)}</span><span>${((min + max) / 2).toFixed(1)}</span><span>${max.toFixed(1)}</span>`;
+  html += '</div></div>';
+  return html;
+}
+
+// ==================== 渲染：文本列分析 ====================
+// 从值中提取标签：有冒号取冒号前，否则原值
+function shortLabel(val) {
+  const s = String(val);
+  const idx = s.indexOf(':');
+  if (idx === -1) { const idx2 = s.indexOf('：'); return idx2 > 0 ? s.substring(0, idx2).trim() : s; }
+  return idx > 0 ? s.substring(0, idx).trim() : s;
+}
+
+// 判断是否为"问题"类标签（负面值）
+const NEGATIVE_KEYWORDS = ['不合理','不正确','不完整','不清晰','不满足','不通过','不达标','不合格','错误','失败','异常','缺失','无效','拒绝','差','否','no','false','fail','error','invalid','incorrect','wrong'];
+function isNegativeValue(val) {
+  const label = shortLabel(val).toLowerCase();
+  return NEGATIVE_KEYWORDS.some(kw => label.includes(kw));
+}
+
+// 判断是否为"修正/补充"类列
+const CORRECTION_KEYWORDS = ['补充短答案', 'response修正', 'Response修正', 'Query修正', 'query修正'];
+function isCorrectionCol(col) {
+  return CORRECTION_KEYWORDS.some(kw => col.includes(kw));
+}
+
+function renderTextAnalysis(col, stats) {
+  // 修正/补充类列：直接展示非空数据
+  if (isCorrectionCol(col)) return renderCorrectionPreview(col, stats);
+  let html = `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #ede9fe;">📝 ${col} <span style="font-size:12px;color:#9ca3af;">（文本列 · 共 ${stats.count} 条）</span></h3>`;
+
+  // 按频率聚合：冒号前相同的归为一组
+  const labelMap = {};
+  Object.entries(stats.totalFreq).forEach(([val, count]) => {
+    const label = shortLabel(val);
+    if (!labelMap[label]) labelMap[label] = { count: 0, originals: [] };
+    labelMap[label].count += count;
+    labelMap[label].originals.push(val);
+  });
+  const sorted = Object.entries(labelMap).sort((a, b) => b[1].count - a[1].count);
+  const colors = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#7c2d12','#4338ca','#0891b2','#be123c','#65a30d'];
+
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">';
+  // 计算有效率（提前算，和卡片放一行）
+  const negCount = sorted.filter(([label]) => isNegativeValue(label)).reduce((s, [, info]) => s + info.count, 0);
+  const posCount = stats.count - negCount;
+  const hasRate = negCount > 0 && posCount > 0;
+
+  // 有效率卡片放最前面
+  if (hasRate) {
+    const rate = (posCount / stats.count * 100).toFixed(1);
+    const colShort = col.replace(/是否.*/, '');
+    html += `<div class="stat-box" style="border-left: 4px solid #059669; background: linear-gradient(135deg, #ecfdf5, #d1fae5);flex:1;min-width:140px;">
+      <div class="label">${escapeHtml(colShort)}有效率</div>
+      <div class="value" style="color:#059669;">${rate}%</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">${posCount} / ${stats.count}</div>
+    </div>`;
+  }
+
+  sorted.forEach(([label, info], i) => {
+    const pct = (info.count / stats.count * 100).toFixed(1);
+    const isNeg = isNegativeValue(label);
+    const color = isNeg ? '#dc2626' : colors[i % colors.length];
+    html += `<div class="stat-box" style="border-left: 4px solid ${color};flex:1;min-width:140px;">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="value" ${isNeg ? 'style="color:#dc2626;"' : ''}>${info.count}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">${pct}%</div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // 当唯一值较多时（>5），额外展示 Top 10 频率条形图
+  if (sorted.length > 5) {
+    const top10 = sorted.slice(0, 10);
+    const maxCount = top10[0][1].count;
+    html += '<div class="chart-container"><h3>Top 10 频率</h3><table class="freq-table"><thead><tr><th>值</th><th>次数</th><th>占比</th><th>分布</th></tr></thead><tbody>';
+    top10.forEach(([label, info]) => {
+      const pct = (info.count / stats.count * 100).toFixed(1);
+      const barW = (info.count / maxCount * 100).toFixed(0);
+      html += `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(label)}</td>`;
+      html += `<td>${info.count}</td><td>${pct}%</td>`;
+      html += `<td style="width:40%;"><div class="freq-bar" style="width:${barW}%"></div></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // 问题数据预览：展示负面值对应的原始行
+  const negLabels = sorted.filter(([label]) => isNegativeValue(label));
+  if (negLabels.length > 0) {
+    const negOriginals = new Set();
+    negLabels.forEach(([, info]) => info.originals.forEach(v => negOriginals.add(String(v))));
+    const badRows = rawData.filter(r => negOriginals.has(String(r[col])));
+    if (badRows.length > 0) {
+      const previewCols = columns.filter(c => {
+        const cl = c.toLowerCase();
+        if (cl.includes('id')) return false;
+        // 备注列：只有内容非空时才展示
+        if (cl.includes('备注')) {
+          return badRows.some(r => { const v = r[c]; return v !== null && v !== undefined && String(v).trim() !== ''; });
+        }
+        return cl.includes('query') || cl.includes('translate_query')
+          || cl.includes('response') || cl.includes('translate_response')
+          || c === col;
+      });
+      if (previewCols.indexOf(col) === -1) previewCols.unshift(col);
+      const maxPreview = Math.min(badRows.length, 50);
+      html += `<div class="chart-container" style="background:#fef2f2;">`;
+      html += `<h3 style="color:#dc2626;">⚠️ 问题数据预览（${badRows.length} 条）</h3>`;
+      html += '<div style="overflow-x:auto;max-height:300px;overflow-y:auto;">';
+      html += '<table class="freq-table"><thead><tr>';
+      html += '<th>#</th>';
+      previewCols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i < maxPreview; i++) {
+        html += '<tr>';
+        html += `<td style="color:#9ca3af;">${i + 1}</td>`;
+        previewCols.forEach(c => {
+          const v = badRows[i][c];
+          const isThisCol = c === col;
+          html += `<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;${isThisCol ? 'color:#dc2626;font-weight:600;' : ''}">${escapeHtml(String(v == null ? '' : v))}</td>`;
+        });
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      if (badRows.length > 50) html += `<p style="font-size:12px;color:#9ca3af;margin-top:8px;">仅显示前 50 条，共 ${badRows.length} 条</p>`;
+      html += '</div>';
+    }
+  }
+
+  return html;
+}
+
+// ==================== 修正/补充列预览 ====================
+function renderCorrectionPreview(col, stats) {
+  // Query修正不单独分析，嵌入到 Query 有效率的问题数据预览中
+  if (col.includes('Query修正') || col.includes('query修正')) return '';
+  // 找出非空行
+  const rows = rawData.filter(r => {
+    const v = r[col];
+    return v !== null && v !== undefined && String(v).trim() !== '';
+  });
+  let html = `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:12px;">📝 ${escapeHtml(col)} <span style="font-size:12px;color:#9ca3af;">（共 ${rows.length} 条非空数据 / ${rawData.length} 总条数）</span></h3>`;
+  if (!rows.length) {
+    html += '<p style="color:#9ca3af;">该列无数据</p>';
+    return html;
+  }
+  // 确定展示列：query、translate_query、response、translate_response + 所有修正/补充列
+  const previewCols = columns.filter(c => {
+    const cl = c.toLowerCase();
+    if (cl.includes('id')) return false;
+    if (cl.includes('query修正')) return false; // Query修正不在此处展示
+    return cl.includes('query') || cl.includes('translate_query')
+      || cl.includes('response') || cl.includes('translate_response')
+      || isCorrectionCol(c);
+  });
+  if (previewCols.indexOf(col) === -1) previewCols.unshift(col);
+  const maxRows = Math.min(rows.length, 100);
+  html += '<div style="overflow-x:auto;max-height:500px;overflow-y:auto;">';
+  html += '<table class="freq-table"><thead><tr><th>#</th>';
+  previewCols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+  html += '</tr></thead><tbody>';
+  for (let i = 0; i < maxRows; i++) {
+    html += '<tr>';
+    html += `<td style="color:#9ca3af;">${i + 1}</td>`;
+    previewCols.forEach(c => {
+      const v = rows[i][c];
+      const highlight = isCorrectionCol(c) && v && String(v).trim();
+      html += `<td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:normal;${highlight ? 'color:#5b21b6;font-weight:600;' : ''}">${escapeHtml(String(v == null ? '' : v))}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  if (rows.length > 100) html += `<p style="font-size:12px;color:#9ca3af;margin-top:8px;">仅显示前 100 条，共 ${rows.length} 条</p>`;
+  return html;
+}
+
+// ==================== 删除列模式 ====================
+function toggleDeleteMode() {
+  deleteMode = !deleteMode;
+  deleteCols.clear();
+  const btn = document.getElementById('delModeBtn');
+  const hint = document.getElementById('colHint');
+  document.getElementById('delConfirmBtn').classList.add('hidden');
+  if (deleteMode) {
+    btn.style.background = '#dc2626'; btn.style.color = '#fff';
+    hint.textContent = '点击列名标记要删除的列（红色）：';
+    hint.style.color = '#dc2626';
+  } else {
+    btn.style.background = 'transparent'; btn.style.color = '#dc2626';
+    hint.textContent = '点击列名选择要分析的列：';
+    hint.style.color = '#6b7280';
+  }
+  renderColSelector();
+}
+
+function confirmDeleteCols() {
+  if (!deleteCols.size) return;
+  if (!confirm(`确定删除 ${deleteCols.size} 列？\n${[...deleteCols].join('、')}`)) return;
+  columns = columns.filter(c => !deleteCols.has(c));
+  rawData = rawData.map(row => {
+    const newRow = {};
+    columns.forEach(c => newRow[c] = row[c]);
+    return newRow;
+  });
+  deleteCols.forEach(c => selectedCols.delete(c));
+  deleteCols.clear();
+  deleteMode = false;
+  document.getElementById('delModeBtn').style.background = 'transparent';
+  document.getElementById('delModeBtn').style.color = '#dc2626';
+  document.getElementById('delConfirmBtn').classList.add('hidden');
+  document.getElementById('colHint').textContent = '点击列名选择要分析的列：';
+  document.getElementById('colHint').style.color = '#6b7280';
+  document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  renderColSelector();
+  renderTable();
+}
+
+// ==================== 导出数据 ====================
+function exportData() {
+  if (!rawData.length) return;
+  const ext = originalFileExt;
+  if (ext === 'json') {
+    const out = rawData.map(row => {
+      const obj = {};
+      columns.forEach(c => obj[c] = row[c]);
+      return obj;
+    });
+    downloadFile(JSON.stringify(out, null, 2), originalFileName + '_exported.json', 'application/json');
+  } else if (['xlsx', 'xls'].includes(ext)) {
+    loadSheetJS(() => {
+      const ws = XLSX.utils.json_to_sheet(rawData.map(row => {
+        const obj = {};
+        columns.forEach(c => obj[c] = row[c]);
+        return obj;
+      }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSX.writeFile(wb, originalFileName + '_exported.xlsx');
+    });
+  } else {
+    // CSV
+    const sep = ',';
+    const lines = [columns.map(c => csvQuote(c)).join(sep)];
+    rawData.forEach(row => {
+      lines.push(columns.map(c => csvQuote(String(row[c] == null ? '' : row[c]))).join(sep));
+    });
+    downloadFile(lines.join('\n'), originalFileName + '_exported.csv', 'text/csv');
+  }
+}
+
+function csvQuote(s) {
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadFile(content, filename, mime) {
+  const blob = new Blob(['\uFEFF' + content], { type: mime + ';charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ==================== 工具函数 ====================
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
