@@ -187,6 +187,7 @@ canvas { width: 100% !important; max-height: 300px; }
   <div class="tab-nav hidden" id="tabNav">
     <button class="tab-btn active" onclick="switchTab('objective')">📋 客观数据分析</button>
     <button class="tab-btn" onclick="switchTab('subjective')">🏷️ 主观题分析</button>
+    <button class="tab-btn" onclick="switchTab('manage')">🗑️ 删除列/导出</button>
   </div>
 
   <!-- 上传区域 -->
@@ -207,13 +208,9 @@ canvas { width: 100% !important; max-height: 300px; }
     <h2>📋 数据预览</h2>
     <div class="toolbar">
       <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
-      <button class="btn btn-primary" onclick="analyzeSelected()">分析选中列</button>
+      <button class="btn btn-outline" onclick="analyzeSelected()">分析选中列</button>
       <button class="btn btn-outline" onclick="selectAllCols()">全选列</button>
       <button class="btn btn-outline" onclick="deselectAllCols()">清空选择</button>
-      <span style="color:#e5e7eb;">|</span>
-      <button class="btn btn-outline" id="delModeBtn" onclick="toggleDeleteMode()" style="color:#dc2626;border-color:#dc2626;">删除列模式</button>
-      <button class="btn hidden" id="delConfirmBtn" onclick="confirmDeleteCols()" style="background:#dc2626;color:#fff;">确认删除</button>
-      <button class="btn btn-outline" id="exportBtn" onclick="exportData()" style="color:#059669;border-color:#059669;">导出数据</button>
       <div class="info" id="dataInfo"></div>
     </div>
     <div style="margin-bottom: 12px;">
@@ -237,7 +234,7 @@ canvas { width: 100% !important; max-height: 300px; }
     <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">选择包含【标签】的文本列，系统将自动提取标签并合并相似项</p>
     <div class="toolbar">
       <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
-      <button class="btn btn-primary" onclick="analyzeSubjective()">分析选中列</button>
+      <button class="btn btn-outline" onclick="analyzeSubjective()">分析选中列</button>
       <button class="btn btn-outline" onclick="subjSelectAll()">全选列</button>
       <button class="btn btn-outline" onclick="subjDeselectAll()">清空选择</button>
       <div class="info" id="subjDataInfo"></div>
@@ -254,9 +251,28 @@ canvas { width: 100% !important; max-height: 300px; }
   </div>
   </div>
 
+  <!-- ========== 删除列/导出 Tab ========== -->
+  <div class="tab-page" id="tab-manage">
+  <div class="card hidden" id="manageCard">
+    <h2>🗑️ 删除列 / 导出数据</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">选择要删除的列（标红），确认后可导出清理后的数据</p>
+    <div class="toolbar">
+      <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
+      <button class="btn btn-outline" id="delModeBtn" onclick="toggleDeleteMode()" style="color:#dc2626;border-color:#dc2626;">选择要删除的列</button>
+      <button class="btn hidden" id="delConfirmBtn" onclick="confirmDeleteCols()" style="background:#dc2626;color:#fff;">确认删除</button>
+      <button class="btn btn-outline" id="exportBtn" onclick="exportData()" style="color:#059669;border-color:#059669;">导出数据</button>
+      <div class="info" id="manageDataInfo"></div>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <strong style="font-size:13px; color:#dc2626;" id="manageColHint">点击列名标记要删除的列（标红）：</strong>
+    </div>
+    <div class="col-selector" id="manageColSelector"></div>
+    <div class="table-wrap" id="manageTableWrap"></div>
+  </div>
+  </div>
+
   </div>
 </div>
-
 <script>
 // ==================== 全局变量 ====================
 let rawData = [];      // [{col1: val, col2: val, ...}, ...]
@@ -402,11 +418,15 @@ function loadData(headers, data) {
   document.getElementById('resultCard').classList.add('hidden');
   document.getElementById('subjCard').classList.remove('hidden');
   document.getElementById('subjResultCard').classList.add('hidden');
+  document.getElementById('manageCard').classList.remove('hidden');
   document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   document.getElementById('subjDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  document.getElementById('manageDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   renderColSelector();
   renderSubjColSelector();
+  renderManageColSelector();
   renderTable();
+  renderManageTable();
 }
 
 function resetAll() {
@@ -419,6 +439,7 @@ function resetAll() {
   document.getElementById('resultCard').classList.add('hidden');
   document.getElementById('subjCard').classList.add('hidden');
   document.getElementById('subjResultCard').classList.add('hidden');
+  document.getElementById('manageCard').classList.add('hidden');
   // Reset tab to objective
   switchTab('objective');
 }
@@ -429,19 +450,27 @@ function renderColSelector() {
   wrap.innerHTML = '';
   columns.forEach(col => {
     // 跳过全空列和 __EMPTY 系列列
-    if (!deleteMode) {
-      if (/^__EMPTY/.test(col)) return;
-      if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
-    }
+    if (/^__EMPTY/.test(col)) return;
+    if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
     const chip = document.createElement('div');
-    if (deleteMode) {
-      chip.className = 'col-chip' + (deleteCols.has(col) ? ' del-mark' : '');
-    } else {
-      chip.className = 'col-chip' + (selectedCols.has(col) ? ' active' : '');
-    }
+    chip.className = 'col-chip' + (selectedCols.has(col) ? ' active' : '');
     const dtype = detectColType(col);
     chip.innerHTML = `${col} <span class="type-badge">${dtype === 'num' ? '数值' : '文本'}</span>`;
-    chip.onclick = () => { deleteMode ? toggleDeleteCol(col) : toggleCol(col); };
+    chip.onclick = () => toggleCol(col);
+    wrap.appendChild(chip);
+  });
+}
+
+// 管理 Tab 列选择器
+function renderManageColSelector() {
+  const wrap = document.getElementById('manageColSelector');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  columns.forEach(col => {
+    const chip = document.createElement('div');
+    chip.className = 'col-chip' + (deleteCols.has(col) ? ' del-mark' : '');
+    chip.innerHTML = `${escapeHtml(col)}`;
+    chip.onclick = () => toggleDeleteCol(col);
     wrap.appendChild(chip);
   });
 }
@@ -449,7 +478,8 @@ function renderColSelector() {
 function toggleDeleteCol(col) {
   if (deleteCols.has(col)) deleteCols.delete(col); else deleteCols.add(col);
   document.getElementById('delConfirmBtn').classList.toggle('hidden', deleteCols.size === 0);
-  renderColSelector();
+  renderManageColSelector();
+  renderManageTable();
 }
 
 function toggleCol(col) {
@@ -965,18 +995,17 @@ function toggleDeleteMode() {
   deleteMode = !deleteMode;
   deleteCols.clear();
   const btn = document.getElementById('delModeBtn');
-  const hint = document.getElementById('colHint');
+  const hint = document.getElementById('manageColHint');
   document.getElementById('delConfirmBtn').classList.add('hidden');
   if (deleteMode) {
     btn.style.background = '#dc2626'; btn.style.color = '#fff';
-    hint.textContent = '点击列名标记要删除的列（红色）：';
-    hint.style.color = '#dc2626';
+    if (hint) { hint.textContent = '点击列名标记要删除的列（红色）：'; hint.style.color = '#dc2626'; }
   } else {
     btn.style.background = 'transparent'; btn.style.color = '#dc2626';
-    hint.textContent = '点击列名选择要分析的列：';
-    hint.style.color = '#6b7280';
+    if (hint) { hint.textContent = '点击列名标记要删除的列（标红）：'; hint.style.color = '#dc2626'; }
   }
-  renderColSelector();
+  renderManageColSelector();
+  renderManageTable();
 }
 
 function confirmDeleteCols() {
@@ -988,17 +1017,49 @@ function confirmDeleteCols() {
     columns.forEach(c => newRow[c] = row[c]);
     return newRow;
   });
-  deleteCols.forEach(c => selectedCols.delete(c));
+  deleteCols.forEach(c => { selectedCols.delete(c); subjSelectedCols.delete(c); });
   deleteCols.clear();
   deleteMode = false;
   document.getElementById('delModeBtn').style.background = 'transparent';
   document.getElementById('delModeBtn').style.color = '#dc2626';
   document.getElementById('delConfirmBtn').classList.add('hidden');
-  document.getElementById('colHint').textContent = '点击列名选择要分析的列：';
-  document.getElementById('colHint').style.color = '#6b7280';
-  document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  const hint = document.getElementById('manageColHint');
+  if (hint) { hint.textContent = '点击列名标记要删除的列（标红）：'; hint.style.color = '#dc2626'; }
+  // 更新所有 Tab 的信息和选择器
+  const infoText = `${rawData.length} 行 × ${columns.length} 列`;
+  document.getElementById('dataInfo').textContent = infoText;
+  document.getElementById('subjDataInfo').textContent = infoText;
+  document.getElementById('manageDataInfo').textContent = infoText;
   renderColSelector();
+  renderSubjColSelector();
+  renderManageColSelector();
   renderTable();
+  renderManageTable();
+}
+
+// ==================== 管理 Tab 数据预览表格 ====================
+function renderManageTable() {
+  const wrap = document.getElementById('manageTableWrap');
+  if (!wrap) return;
+  const maxRows = Math.min(rawData.length, 200);
+  let html = '<table><thead><tr>';
+  columns.forEach(col => {
+    const isDel = deleteCols.has(col);
+    html += `<th style="${isDel ? 'background:#dc2626;' : ''}" onclick="toggleDeleteCol('${col.replace(/'/g, "\\'")}')">${escapeHtml(col)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  for (let i = 0; i < maxRows; i++) {
+    html += '<tr>';
+    columns.forEach(col => {
+      const v = rawData[i][col];
+      const isDel = deleteCols.has(col);
+      html += `<td style="${isDel ? 'background:#fef2f2;color:#dc2626;' : ''}">${v === null || v === undefined ? '' : escapeHtml(String(v))}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (rawData.length > 200) html += `<p style="text-align:center;padding:8px;color:#9ca3af;font-size:12px;">仅显示前 200 行，共 ${rawData.length} 行</p>`;
+  wrap.innerHTML = html;
 }
 
 // ==================== 导出数据 ====================
@@ -1055,8 +1116,9 @@ function escapeHtml(s) {
 
 // ==================== Tab 切换 ====================
 function switchTab(tabId) {
+  const tabIds = ['objective', 'subjective', 'manage'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', (i === 0 && tabId === 'objective') || (i === 1 && tabId === 'subjective'));
+    btn.classList.toggle('active', tabIds[i] === tabId);
   });
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('tab-' + tabId);
