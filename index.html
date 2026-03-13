@@ -428,8 +428,11 @@ function renderColSelector() {
   const wrap = document.getElementById('colSelector');
   wrap.innerHTML = '';
   columns.forEach(col => {
-    // 跳过全空列
-    if (!deleteMode && rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
+    // 跳过全空列和 __EMPTY 系列列
+    if (!deleteMode) {
+      if (/^__EMPTY/.test(col)) return;
+      if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
+    }
     const chip = document.createElement('div');
     if (deleteMode) {
       chip.className = 'col-chip' + (deleteCols.has(col) ? ' del-mark' : '');
@@ -1066,7 +1069,8 @@ function renderSubjColSelector() {
   if (!wrap) return;
   wrap.innerHTML = '';
   columns.forEach(col => {
-    // 跳过全空列
+    // 跳过全空列和 __EMPTY 系列列
+    if (/^__EMPTY/.test(col)) return;
     if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
     const chip = document.createElement('div');
     chip.className = 'col-chip' + (subjSelectedCols.has(col) ? ' active' : '');
@@ -1238,6 +1242,7 @@ function renderSubjectiveCol(col, threshold) {
   // 合并后的标签列表
   const maxGroup = Math.max(...groups.map(g => g.totalCount));
   html += '<div style="margin-bottom:20px;">';
+  let groupIdx = 0;
   groups.forEach((g, i) => {
     const barW = (g.totalCount / maxGroup * 100).toFixed(0);
     const hasMultiple = g.variants.length > 1;
@@ -1255,8 +1260,49 @@ function renderSubjectiveCol(col, threshold) {
         html += `<span class="var-tag">${escapeHtml(v.tag)} (${v.count})</span>`;
       });
       html += '</div>';
+      // 合并数据预览（可折叠）
+      const previewId = `merge-preview-${col.replace(/\s/g, '_')}-${groupIdx}`;
+      html += `<div style="margin-top:8px;"><button class="btn btn-outline" style="font-size:12px;padding:4px 12px;" onclick="document.getElementById('${previewId}').classList.toggle('hidden')">查看合并数据</button></div>`;
+      html += `<div id="${previewId}" class="hidden" style="margin-top:10px;">`;
+      // 找出包含该组任一变体的原始行
+      const variantSet = new Set(g.variants.map(v => v.tag));
+      const matchRows = [];
+      rawData.forEach(row => {
+        const v = row[col];
+        if (v === null || v === undefined) return;
+        const tags = extractTags(v);
+        if (tags.some(t => variantSet.has(t))) matchRows.push(row);
+      });
+      if (matchRows.length > 0) {
+        const previewCols = columns.filter(c => {
+          if (/^__EMPTY/.test(c)) return false;
+          const cl = c.toLowerCase();
+          if (cl.includes('id')) return false;
+          return c === col || cl.includes('query') || cl.includes('translate_query') || cl.includes('response') || cl.includes('translate_response');
+        });
+        if (previewCols.indexOf(col) === -1) previewCols.unshift(col);
+        const maxP = Math.min(matchRows.length, 30);
+        html += `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;">`;
+        html += '<table class="freq-table"><thead><tr><th>#</th>';
+        previewCols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+        html += '</tr></thead><tbody>';
+        for (let r = 0; r < maxP; r++) {
+          html += '<tr>';
+          html += `<td style="color:#9ca3af;">${r + 1}</td>`;
+          previewCols.forEach(c => {
+            const val = matchRows[r][c];
+            const isMain = c === col;
+            html += `<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:normal;${isMain ? 'color:#7c3aed;font-weight:600;' : ''}">${escapeHtml(String(val == null ? '' : val))}</td>`;
+          });
+          html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+        if (matchRows.length > 30) html += `<p style="font-size:11px;color:#9ca3af;margin-top:4px;">仅显示前 30 条，共 ${matchRows.length} 条</p>`;
+      }
+      html += '</div>';
     }
     html += '</div>';
+    groupIdx++;
   });
   html += '</div>';
 
