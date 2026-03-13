@@ -1303,20 +1303,25 @@ function renderSubjectiveCol(col, threshold) {
 
   // 合并后的标签列表
   const maxGroup = Math.max(...groups.map(g => g.totalCount));
-  html += '<div style="margin-bottom:20px;">';
-  let groupIdx = 0;
-  groups.forEach((g, i) => {
-    const barW = (g.totalCount / maxGroup * 100).toFixed(0);
-    const hasMultiple = g.variants.length > 1;
-    html += '<div class="merge-group">';
-    html += `<div style="display:flex;align-items:center;gap:12px;">`;
-    html += `<span class="canonical">${escapeHtml(g.canonical)}</span>`;
-    html += `<span style="font-size:13px;color:#7c3aed;font-weight:600;">${g.totalCount} 次</span>`;
-    html += `<span style="font-size:12px;color:#94a3b8;">${(g.totalCount / totalTags * 100).toFixed(1)}%</span>`;
-    if (hasMultiple) html += `<span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;">合并了 ${g.variants.length} 个变体</span>`;
-    html += '</div>';
-    html += `<div style="margin-top:8px;"><div class="freq-bar" style="width:${barW}%;height:10px;"></div></div>`;
-    if (hasMultiple) {
+  // 分组：有合并的（详细卡片）vs 无合并的（紧凑展示）
+  const mergedGroups = groups.filter(g => g.variants.length > 1);
+  const singleGroups = groups.filter(g => g.variants.length === 1);
+
+  // 有合并的标签 - 详细卡片
+  if (mergedGroups.length > 0) {
+    html += `<h4 style="font-size:14px;color:#5b21b6;margin-bottom:12px;">🔗 合并标签（${mergedGroups.length} 组）</h4>`;
+    html += '<div style="margin-bottom:20px;">';
+    let groupIdx = 0;
+    mergedGroups.forEach(g => {
+      const barW = (g.totalCount / maxGroup * 100).toFixed(0);
+      html += '<div class="merge-group">';
+      html += `<div style="display:flex;align-items:center;gap:12px;">`;
+      html += `<span class="canonical">${escapeHtml(g.canonical)}</span>`;
+      html += `<span style="font-size:13px;color:#7c3aed;font-weight:600;">${g.totalCount} 次</span>`;
+      html += `<span style="font-size:12px;color:#94a3b8;">${(g.totalCount / totalTags * 100).toFixed(1)}%</span>`;
+      html += `<span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;">合并了 ${g.variants.length} 个变体</span>`;
+      html += '</div>';
+      html += `<div style="margin-top:8px;"><div class="freq-bar" style="width:${barW}%;height:10px;"></div></div>`;
       html += '<div class="variants">包含：';
       g.variants.forEach(v => {
         html += `<span class="var-tag">${escapeHtml(v.tag)} (${v.count})</span>`;
@@ -1336,13 +1341,11 @@ function renderSubjectiveCol(col, threshold) {
         if (tags.some(t => variantSet.has(t))) matchRows.push(row);
       });
       if (matchRows.length > 0) {
-        // 预览列：当前分析列 + 有实际数据的非空列（排除 __EMPTY 和 ID）
         const previewCols = [col];
         columns.forEach(c => {
           if (c === col) return;
           if (/^__EMPTY/.test(c)) return;
           if (c.toLowerCase().includes('id')) return;
-          // 只加入在匹配行中有非空数据的列
           if (matchRows.some(row => { const v = row[c]; return v !== null && v !== undefined && String(v).trim() !== ''; })) {
             previewCols.push(c);
           }
@@ -1366,11 +1369,26 @@ function renderSubjectiveCol(col, threshold) {
         if (matchRows.length > 30) html += `<p style="font-size:11px;color:#9ca3af;margin-top:4px;">仅显示前 30 条，共 ${matchRows.length} 条</p>`;
       }
       html += '</div>';
-    }
+      html += '</div>';
+      groupIdx++;
+    });
     html += '</div>';
-    groupIdx++;
-  });
-  html += '</div>';
+  }
+
+  // 未合并的标签 - 紧凑流式布局
+  if (singleGroups.length > 0) {
+    html += `<h4 style="font-size:14px;color:#64748b;margin-bottom:12px;">📌 独立标签（${singleGroups.length} 个）</h4>`;
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">';
+    singleGroups.forEach(g => {
+      const pct = (g.totalCount / totalTags * 100).toFixed(1);
+      html += `<div style="display:inline-flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;">`;
+      html += `<span style="color:#1e293b;font-weight:500;">${escapeHtml(g.canonical)}</span>`;
+      html += `<span style="color:#7c3aed;font-weight:600;font-size:12px;">${g.totalCount}</span>`;
+      html += `<span style="color:#94a3b8;font-size:11px;">${pct}%</span>`;
+      html += '</div>';
+    });
+    html += '</div>';
+  }
 
   // Top 20 频率表
   if (groups.length > 10) {
