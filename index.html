@@ -142,17 +142,24 @@ canvas { width: 100% !important; max-height: 300px; }
 
 /* 主观分析相关 */
 .merge-group {
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
-  padding: 16px; margin-bottom: 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 6px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
 }
-.merge-group .canonical { font-weight: 700; color: #1e293b; font-size: 15px; }
+.merge-group .canonical { font-weight: 700; color: #1e293b; font-size: 13px; }
+.merge-group .mg-meta {
+  font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 6px;
+}
+.merge-group .mg-bar { flex: 0 0 60px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.merge-group .mg-bar-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 3px; }
 .merge-group .variants {
-  font-size: 12px; color: #94a3b8; margin-top: 6px; line-height: 1.8;
+  font-size: 11px; color: #94a3b8; line-height: 1.6; width: 100%;
 }
 .merge-group .variants .var-tag {
-  display: inline-block; background: #e2e8f0; padding: 2px 8px;
-  border-radius: 6px; margin: 2px 4px 2px 0; font-size: 11px; color: #475569;
+  display: inline-block; background: #e2e8f0; padding: 1px 6px;
+  border-radius: 4px; margin: 1px 3px 1px 0; font-size: 10px; color: #475569;
 }
+.merge-group .mg-actions { margin-left: auto; flex-shrink: 0; }
 .subj-stat-row {
   display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
 }
@@ -1517,23 +1524,26 @@ function renderSubjectiveCol(col, threshold) {
     let groupIdx = 0;
     mergedGroups.forEach(g => {
       const barW = (g.totalCount / maxGroup * 100).toFixed(0);
-      html += '<div class="merge-group">';
-      html += `<div style="display:flex;align-items:center;gap:12px;">`;
-      html += `<span class="canonical">${escapeHtml(g.canonical)}</span>`;
-      html += `<span style="font-size:13px;color:#7c3aed;font-weight:600;">${g.totalCount} 次</span>`;
-      html += `<span style="font-size:12px;color:#94a3b8;">${(g.totalCount / totalTags * 100).toFixed(1)}%</span>`;
-      html += `<span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;">合并了 ${g.variants.length} 个变体</span>`;
-      html += '</div>';
-      html += `<div style="margin-top:8px;"><div class="freq-bar" style="width:${barW}%;height:10px;"></div></div>`;
-      html += '<div class="variants">包含：';
-      g.variants.forEach(v => {
-        html += `<span class="var-tag">${escapeHtml(v.tag)} (${v.count})</span>`;
-      });
-      html += '</div>';
-      // 合并数据预览（可折叠）
+      const pctStr = (g.totalCount / totalTags * 100).toFixed(1);
       const previewId = `merge-preview-${col.replace(/\s/g, '_')}-${groupIdx}`;
-      html += `<div style="margin-top:8px;"><button class="btn btn-outline" style="font-size:12px;padding:4px 12px;" onclick="document.getElementById('${previewId}').classList.toggle('hidden')">查看合并数据</button></div>`;
-      html += `<div id="${previewId}" class="hidden" style="margin-top:10px;">`;
+      html += '<div class="merge-group">';
+      html += `<span class="canonical">${escapeHtml(g.canonical)}</span>`;
+      html += `<span class="mg-meta">`;
+      html += `<span style="color:#7c3aed;font-weight:600;">${g.totalCount}</span>`;
+      html += `<span>${pctStr}%</span>`;
+      html += `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">${g.variants.length}变体</span>`;
+      html += `</span>`;
+      html += `<div class="mg-bar"><div class="mg-bar-fill" style="width:${barW}%"></div></div>`;
+      html += `<span class="mg-actions"><button class="btn btn-outline" style="font-size:10px;padding:2px 8px;border-width:1px;" onclick="document.getElementById('${previewId}').classList.toggle('hidden')">详情</button></span>`;
+      // 变体标签（只在有多个时显示）
+      if (g.variants.length > 1) {
+        html += '<div class="variants">';
+        g.variants.forEach(v => {
+          html += `<span class="var-tag">${escapeHtml(v.tag)}(${v.count})</span>`;
+        });
+        html += '</div>';
+      }
+      html += `<div id="${previewId}" class="hidden" style="width:100%;margin-top:6px;">`;
       // 找出包含该组任一变体的原始行
       const variantSet = new Set(g.variants.map(v => v.tag));
       const matchRows = [];
