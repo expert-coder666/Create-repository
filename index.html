@@ -125,6 +125,51 @@ canvas { width: 100% !important; max-height: 300px; }
 /* 隐藏区域 */
 .hidden { display: none !important; }
 
+/* Tab 导航 */
+.tab-nav {
+  display: flex; gap: 0; margin-bottom: 20px; background: rgba(255,255,255,0.15);
+  border-radius: 12px; padding: 4px; backdrop-filter: blur(10px);
+}
+.tab-btn {
+  flex: 1; padding: 12px 24px; border: none; background: transparent;
+  color: rgba(255,255,255,0.7); font-size: 15px; font-weight: 600;
+  cursor: pointer; border-radius: 10px; transition: all 0.3s;
+}
+.tab-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.tab-btn.active { background: #fff; color: #5a4fcf; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.tab-page { display: none; }
+.tab-page.active { display: block; }
+
+/* 主观分析相关 */
+.merge-group {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 16px; margin-bottom: 12px;
+}
+.merge-group .canonical { font-weight: 700; color: #1e293b; font-size: 15px; }
+.merge-group .variants {
+  font-size: 12px; color: #94a3b8; margin-top: 6px; line-height: 1.8;
+}
+.merge-group .variants .var-tag {
+  display: inline-block; background: #e2e8f0; padding: 2px 8px;
+  border-radius: 6px; margin: 2px 4px 2px 0; font-size: 11px; color: #475569;
+}
+.subj-stat-row {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.subj-stat-card {
+  background: linear-gradient(135deg, #fdf4ff, #fae8ff); border-radius: 12px;
+  padding: 16px 20px; text-align: center; min-width: 120px; flex: 1;
+}
+.subj-stat-card .label { font-size: 11px; color: #a855f7; letter-spacing: 0.5px; }
+.subj-stat-card .value { font-size: 1.5em; font-weight: 700; color: #7e22ce; margin-top: 4px; }
+.similarity-slider {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  background: #f8fafc; padding: 12px 16px; border-radius: 10px;
+}
+.similarity-slider label { font-size: 13px; color: #64748b; white-space: nowrap; }
+.similarity-slider input[type="range"] { flex: 1; }
+.similarity-slider .val { font-weight: 700; color: #7c3aed; min-width: 40px; }
+
 /* 响应式 */
 @media (max-width: 640px) {
   body { padding: 10px; }
@@ -138,6 +183,12 @@ canvas { width: 100% !important; max-height: 300px; }
 <div class="container">
   <h1>📊 文档数据分析工具</h1>
 
+  <!-- Tab 导航（上传后显示） -->
+  <div class="tab-nav hidden" id="tabNav">
+    <button class="tab-btn active" onclick="switchTab('objective')">📋 客观数据分析</button>
+    <button class="tab-btn" onclick="switchTab('subjective')">🏷️ 主观题分析</button>
+  </div>
+
   <!-- 上传区域 -->
   <div class="card" id="uploadCard">
     <div class="upload-area" id="uploadArea">
@@ -149,6 +200,8 @@ canvas { width: 100% !important; max-height: 300px; }
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.json,.tsv,.txt">
   </div>
 
+  <!-- ========== 客观数据分析 Tab ========== -->
+  <div class="tab-page active" id="tab-objective">
   <!-- 数据预览 + 列选择 -->
   <div class="card hidden" id="dataCard">
     <h2>📋 数据预览</h2>
@@ -175,6 +228,31 @@ canvas { width: 100% !important; max-height: 300px; }
     <h2>📈 分析结果</h2>
     <div id="resultContent"></div>
   </div>
+  </div>
+
+  <!-- ========== 主观题分析 Tab ========== -->
+  <div class="tab-page" id="tab-subjective">
+  <div class="card hidden" id="subjCard">
+    <h2>🏷️ 主观题标签分析</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">选择包含【标签】的文本列，系统将自动提取标签并合并相似项</p>
+    <div class="toolbar">
+      <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
+      <button class="btn btn-primary" onclick="analyzeSubjective()">分析选中列</button>
+      <button class="btn btn-outline" onclick="subjSelectAll()">全选列</button>
+      <button class="btn btn-outline" onclick="subjDeselectAll()">清空选择</button>
+      <div class="info" id="subjDataInfo"></div>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <strong style="font-size:13px; color:#6b7280;">点击列名选择要分析的列：</strong>
+    </div>
+    <div class="col-selector" id="subjColSelector"></div>
+  </div>
+
+  <div class="card hidden" id="subjResultCard">
+    <h2>📊 主观题分析结果</h2>
+    <div id="subjResultContent"></div>
+  </div>
+  </div>
 
   </div>
 </div>
@@ -186,6 +264,7 @@ let columns = [];      // ['col1', 'col2', ...]
 let selectedCols = new Set();
 let deleteMode = false;
 let deleteCols = new Set();
+let subjSelectedCols = new Set();
 let originalFileExt = 'csv';
 let originalFileName = 'data';
 
@@ -316,21 +395,32 @@ function loadData(headers, data) {
   columns = headers;
   rawData = data;
   selectedCols.clear();
+  subjSelectedCols.clear();
   document.getElementById('uploadCard').classList.add('hidden');
+  document.getElementById('tabNav').classList.remove('hidden');
   document.getElementById('dataCard').classList.remove('hidden');
   document.getElementById('resultCard').classList.add('hidden');
+  document.getElementById('subjCard').classList.remove('hidden');
+  document.getElementById('subjResultCard').classList.add('hidden');
   document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  document.getElementById('subjDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   renderColSelector();
+  renderSubjColSelector();
   renderTable();
 }
 
 function resetAll() {
-  rawData = []; columns = []; selectedCols.clear();
+  rawData = []; columns = []; selectedCols.clear(); subjSelectedCols.clear();
   deleteMode = false; deleteCols.clear();
   fileInput.value = '';
   document.getElementById('uploadCard').classList.remove('hidden');
+  document.getElementById('tabNav').classList.add('hidden');
   document.getElementById('dataCard').classList.add('hidden');
   document.getElementById('resultCard').classList.add('hidden');
+  document.getElementById('subjCard').classList.add('hidden');
+  document.getElementById('subjResultCard').classList.add('hidden');
+  // Reset tab to objective
+  switchTab('objective');
 }
 
 // ==================== 列选择器 ====================
@@ -338,6 +428,8 @@ function renderColSelector() {
   const wrap = document.getElementById('colSelector');
   wrap.innerHTML = '';
   columns.forEach(col => {
+    // 跳过全空列
+    if (!deleteMode && rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
     const chip = document.createElement('div');
     if (deleteMode) {
       chip.className = 'col-chip' + (deleteCols.has(col) ? ' del-mark' : '');
@@ -956,6 +1048,242 @@ function downloadFile(content, filename, mime) {
 // ==================== 工具函数 ====================
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ==================== Tab 切换 ====================
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && tabId === 'objective') || (i === 1 && tabId === 'subjective'));
+  });
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('tab-' + tabId);
+  if (target) target.classList.add('active');
+}
+
+// ==================== 主观题分析：列选择器 ====================
+function renderSubjColSelector() {
+  const wrap = document.getElementById('subjColSelector');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  columns.forEach(col => {
+    // 跳过全空列
+    if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
+    const chip = document.createElement('div');
+    chip.className = 'col-chip' + (subjSelectedCols.has(col) ? ' active' : '');
+    chip.innerHTML = `${escapeHtml(col)}`;
+    chip.onclick = () => {
+      if (subjSelectedCols.has(col)) subjSelectedCols.delete(col); else subjSelectedCols.add(col);
+      renderSubjColSelector();
+    };
+    wrap.appendChild(chip);
+  });
+}
+function subjSelectAll() { columns.forEach(c => subjSelectedCols.add(c)); renderSubjColSelector(); }
+function subjDeselectAll() { subjSelectedCols.clear(); renderSubjColSelector(); }
+
+// ==================== 主观题分析：标签提取 ====================
+function extractTags(text) {
+  const tags = [];
+  const s = String(text);
+  // 提取【】中的标签
+  const re = /[【\[](.*?)[】\]]/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const tag = m[1].trim();
+    if (tag) tags.push(tag);
+  }
+  return tags;
+}
+
+// ==================== 主观题分析：相似度计算 ====================
+function getBigrams(s) {
+  const set = new Set();
+  const normalized = s.toLowerCase().replace(/\s+/g, '');
+  for (let i = 0; i < normalized.length - 1; i++) {
+    set.add(normalized.substring(i, i + 2));
+  }
+  return set;
+}
+
+function jaccardSimilarity(a, b) {
+  const setA = getBigrams(a);
+  const setB = getBigrams(b);
+  if (setA.size === 0 && setB.size === 0) return 1;
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let intersection = 0;
+  setA.forEach(x => { if (setB.has(x)) intersection++; });
+  return intersection / (setA.size + setB.size - intersection);
+}
+
+// 包含关系也算相似
+function isSimilarTag(a, b, threshold) {
+  const na = a.toLowerCase().replace(/\s+/g, '');
+  const nb = b.toLowerCase().replace(/\s+/g, '');
+  // 包含关系
+  if (na.includes(nb) || nb.includes(na)) return true;
+  return jaccardSimilarity(a, b) >= threshold;
+}
+
+// Union-Find 合并相似标签
+function mergeSimilarTags(tagFreq, threshold) {
+  const tags = Object.keys(tagFreq);
+  const parent = {};
+  tags.forEach(t => parent[t] = t);
+
+  function find(x) {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  }
+  function union(a, b) {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) return;
+    // 保留频次高的作为根
+    if (tagFreq[ra] >= tagFreq[rb]) parent[rb] = ra;
+    else parent[ra] = rb;
+  }
+
+  for (let i = 0; i < tags.length; i++) {
+    for (let j = i + 1; j < tags.length; j++) {
+      if (isSimilarTag(tags[i], tags[j], threshold)) {
+        union(tags[i], tags[j]);
+      }
+    }
+  }
+
+  // 按组聚合
+  const groups = {};
+  tags.forEach(t => {
+    const root = find(t);
+    if (!groups[root]) groups[root] = { canonical: root, variants: [], totalCount: 0 };
+    groups[root].variants.push({ tag: t, count: tagFreq[t] });
+    groups[root].totalCount += tagFreq[t];
+  });
+
+  // 每组内选频次最高的作为 canonical
+  Object.values(groups).forEach(g => {
+    g.variants.sort((a, b) => b.count - a.count);
+    g.canonical = g.variants[0].tag;
+  });
+
+  return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
+}
+
+// ==================== 主观题分析：主入口 ====================
+let currentSubjThreshold = 0.5;
+
+function analyzeSubjective() {
+  if (!subjSelectedCols.size) return alert('请先选择要分析的列');
+  const content = document.getElementById('subjResultContent');
+  content.innerHTML = '';
+  const cols = [...subjSelectedCols];
+
+  cols.forEach(col => {
+    const section = document.createElement('div');
+    section.style.marginBottom = '40px';
+    section.style.paddingBottom = '20px';
+    section.style.borderBottom = '1px solid #e5e7eb';
+    section.innerHTML = renderSubjectiveCol(col, currentSubjThreshold);
+    content.appendChild(section);
+  });
+
+  document.getElementById('subjResultCard').classList.remove('hidden');
+  document.getElementById('subjResultCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderSubjectiveCol(col, threshold) {
+  // 提取所有标签
+  const tagFreq = {};
+  let totalTags = 0;
+  let rowsWithTags = 0;
+  rawData.forEach(row => {
+    const v = row[col];
+    if (v === null || v === undefined || String(v).trim() === '') return;
+    const tags = extractTags(v);
+    if (tags.length > 0) rowsWithTags++;
+    tags.forEach(t => {
+      tagFreq[t] = (tagFreq[t] || 0) + 1;
+      totalTags++;
+    });
+  });
+
+  const uniqueBefore = Object.keys(tagFreq).length;
+  if (uniqueBefore === 0) {
+    return `<h3 style="font-size:16px;color:#5b21b6;">🏷️ ${escapeHtml(col)}</h3><p style="color:#9ca3af;margin-top:8px;">未检测到【】标签</p>`;
+  }
+
+  // 合并相似标签
+  const groups = mergeSimilarTags(tagFreq, threshold);
+  const uniqueAfter = groups.length;
+  const merged = uniqueBefore - uniqueAfter;
+
+  let html = `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #ede9fe;">🏷️ ${escapeHtml(col)} <span style="font-size:12px;color:#9ca3af;">（主观标签分析）</span></h3>`;
+
+  // 概览统计
+  html += '<div class="subj-stat-row">';
+  html += `<div class="subj-stat-card"><div class="label">含标签行数</div><div class="value">${rowsWithTags}</div></div>`;
+  html += `<div class="subj-stat-card"><div class="label">标签总数</div><div class="value">${totalTags}</div></div>`;
+  html += `<div class="subj-stat-card"><div class="label">原始标签种类</div><div class="value">${uniqueBefore}</div></div>`;
+  html += `<div class="subj-stat-card"><div class="label">合并后种类</div><div class="value" style="color:#059669;">${uniqueAfter}</div></div>`;
+  html += `<div class="subj-stat-card"><div class="label">合并数量</div><div class="value" style="color:#d97706;">${merged}</div></div>`;
+  html += '</div>';
+
+  // 相似度阈值滑块
+  html += `<div class="similarity-slider">`;
+  html += `<label>合并灵敏度：</label>`;
+  html += `<input type="range" min="0.2" max="0.9" step="0.05" value="${threshold}" onchange="updateThreshold(this.value, '${col.replace(/'/g, "\\'")}')">`;
+  html += `<span class="val" id="threshVal-${col.replace(/\s/g, '_')}">${(threshold * 100).toFixed(0)}%</span>`;
+  html += `<span style="font-size:11px;color:#94a3b8;">（越低合并越激进）</span>`;
+  html += '</div>';
+
+  // 合并后的标签列表
+  const maxGroup = Math.max(...groups.map(g => g.totalCount));
+  html += '<div style="margin-bottom:20px;">';
+  groups.forEach((g, i) => {
+    const barW = (g.totalCount / maxGroup * 100).toFixed(0);
+    const hasMultiple = g.variants.length > 1;
+    html += '<div class="merge-group">';
+    html += `<div style="display:flex;align-items:center;gap:12px;">`;
+    html += `<span class="canonical">${escapeHtml(g.canonical)}</span>`;
+    html += `<span style="font-size:13px;color:#7c3aed;font-weight:600;">${g.totalCount} 次</span>`;
+    html += `<span style="font-size:12px;color:#94a3b8;">${(g.totalCount / totalTags * 100).toFixed(1)}%</span>`;
+    if (hasMultiple) html += `<span style="font-size:11px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;">合并了 ${g.variants.length} 个变体</span>`;
+    html += '</div>';
+    html += `<div style="margin-top:8px;"><div class="freq-bar" style="width:${barW}%;height:10px;"></div></div>`;
+    if (hasMultiple) {
+      html += '<div class="variants">包含：';
+      g.variants.forEach(v => {
+        html += `<span class="var-tag">${escapeHtml(v.tag)} (${v.count})</span>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Top 20 频率表
+  if (groups.length > 10) {
+    const top20 = groups.slice(0, 20);
+    html += '<div class="chart-container"><h3>Top 20 标签频率</h3>';
+    html += '<table class="freq-table"><thead><tr><th>标签</th><th>次数</th><th>占比</th><th>变体数</th><th>分布</th></tr></thead><tbody>';
+    top20.forEach(g => {
+      const pct = (g.totalCount / totalTags * 100).toFixed(1);
+      const barW = (g.totalCount / maxGroup * 100).toFixed(0);
+      html += `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(g.canonical)}</td>`;
+      html += `<td>${g.totalCount}</td><td>${pct}%</td><td>${g.variants.length}</td>`;
+      html += `<td style="width:30%;"><div class="freq-bar" style="width:${barW}%"></div></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
+  return html;
+}
+
+function updateThreshold(val, col) {
+  currentSubjThreshold = parseFloat(val);
+  const label = document.getElementById('threshVal-' + col.replace(/\s/g, '_'));
+  if (label) label.textContent = (currentSubjThreshold * 100).toFixed(0) + '%';
+  // 重新分析
+  analyzeSubjective();
 }
 </script>
 </body>
