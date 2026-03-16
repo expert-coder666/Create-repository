@@ -212,17 +212,35 @@ function parseAndBuild() {
   const raw = document.getElementById('rawInput').value.trim();
   if (!raw) return;
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-  // 合并续行：如果上一行以逗号结尾，把当前行合并上去
-  const merged = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (merged.length > 0 && /[,，、]$/.test(merged[merged.length - 1])) {
-      merged[merged.length - 1] += ' ' + lines[i];
+  // 预拆分：同一行包含多个「Label: val, val」定义时，在第二个 Label: 前断开
+  const presplit = [];
+  for (const line of lines) {
+    if ((line.match(/[:：]/g) || []).length >= 2) {
+      // 在「大写单词(+小写单词) + 冒号」前断开，但不拆第一个
+      const parts = line.split(/\s+(?=[A-Z\u4e00-\u9fff][a-z\u4e00-\u9fff]*(?:\s+[a-z]+)*\s*[:：])/);
+      presplit.push(...parts);
     } else {
-      merged.push(lines[i]);
+      presplit.push(line);
     }
   }
+  // 合并续行：如果上一行以逗号结尾，把当前行合并上去
+  const merged = [];
+  for (let i = 0; i < presplit.length; i++) {
+    if (merged.length > 0 && /[,，、]$/.test(merged[merged.length - 1])) {
+      merged[merged.length - 1] += ' ' + presplit[i];
+    } else {
+      merged.push(presplit[i]);
+    }
+  }
+  // 数词映射
+  const numWords = {one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10};
   let posCount = 0, posLineIdx = -1;
-  for (let i = 0; i < merged.length; i++) { const m = merged[i].match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i); if (m) { posCount = parseInt(m[1]); posLineIdx = i; break; } }
+  for (let i = 0; i < merged.length; i++) {
+    const m = merged[i].match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i);
+    if (m) { posCount = parseInt(m[1]); posLineIdx = i; break; }
+    const wm = merged[i].match(/(one|two|three|four|five|six|seven|eight|nine|ten)\s+(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i);
+    if (wm) { posCount = numWords[wm[1].toLowerCase()]; posLineIdx = i; break; }
+  }
   const dims = [], dimLines = new Set(), vs = new Set(), vm = {};
   function sq(s) { return s.replace(/^[\s''""`「『【]+/,'').replace(/[\s''""`」』】.。;；]+$/,''); }
   merged.forEach((line, idx) => {
