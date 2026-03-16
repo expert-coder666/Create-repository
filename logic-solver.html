@@ -108,7 +108,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 </head>
 <body>
 <div class="header">
-  <h1>🧩 逻辑推理助手 <span style="font-size:10px;opacity:0.5;">v3</span></h1>
+  <h1>🧩 逻辑推理助手 <span style="font-size:10px;opacity:0.5;">v4</span></h1>
   <div class="header-actions">
     <button class="btn btn-w" onclick="undo()" title="Ctrl+Z">↩ 撤销</button>
     <button class="btn btn-w" onclick="resetAll()">🗑 重置</button>
@@ -461,6 +461,16 @@ function onDrop(e, di, pi) {
   e.preventDefault(); e.currentTarget.classList.remove('drag-over');
   if (!dragData || dragData.dimIdx !== di) return;
   const { valIdx, from, fromPos, fromSlot } = dragData;
+  // 最基础保护：如果格子已有确定值，且该值被 at_pos 线索锁定，直接阻止
+  const confirmedVal = getPlaced(di, pi);
+  if (confirmedVal !== null && confirmedVal !== valIdx) {
+    const confirmedName = state.dims[di].values[confirmedVal];
+    const lockClue = state.clues.find(c => c.ok && c.type === 'at_pos' && c.a === confirmedName && c.n === (pi + 1));
+    if (lockClue) {
+      alert(`不能放入 ${pi+1} 号位置：该位置已由线索确定为「${confirmedName}」\n\n${lockClue.original.replace(/^\d+[\.\)、]\s*/, '')}`);
+      dragData = null; return;
+    }
+  }
   const raw = getRaw(di, pi);
   const hasExisting = raw !== null;
   console.log('[onDrop] di=', di, 'pi=', pi, 'valIdx=', valIdx, 'raw=', raw, 'hasExisting=', hasExisting);
