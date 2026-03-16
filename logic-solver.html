@@ -341,6 +341,43 @@ function resetAll() {
 // ==================== 拖拽 ====================
 let dragData = null; // { dimIdx, valIdx, from: 'bank'|'grid'|'staging', fromPos, fromSlot }
 
+// 放置前约束检测：检查将 valIdx 放入 targetPos(0-based) 是否违反线索
+function checkDropViolations(dimIdx, valIdx, targetPos) {
+  const { dims, clues } = state;
+  const valName = dims[dimIdx].values[valIdx];
+  const tp = targetPos + 1; // 1-based
+  const violations = [];
+  clues.forEach((c, ci) => {
+    if (!c.ok || c.type === 'unknown') return;
+    const aIsVal = (c.a === valName), bIsVal = (c.b === valName);
+    if (!aIsVal && !bIsVal) return;
+    const resolvePos = (v) => {
+      if (!v) return null;
+      if (v === valName) return tp;
+      if (v.startsWith('__pos_')) return parseInt(v.replace('__pos_', ''));
+      return findValPos(v);
+    };
+    const av = resolvePos(c.a), bv = resolvePos(c.b);
+    if (av === null || bv === null) return;
+    let bad = false;
+    switch (c.type) {
+      case 'same':       bad = av !== bv; break;
+      case 'not_same':   bad = av === bv; break;
+      case 'at_pos':     bad = av !== bv; break;
+      case 'not_at_pos': bad = av === bv; break;
+      case 'left_of':    bad = bv - av !== 1; break;
+      case 'right_of':   bad = av - bv !== 1; break;
+      case 'left_any':   bad = av >= bv; break;
+      case 'right_any':  bad = av <= bv; break;
+      case 'adjacent':   bad = Math.abs(av - bv) !== 1; break;
+      case 'not_adjacent': bad = Math.abs(av - bv) === 1; break;
+      case 'distance':   bad = Math.abs(av - bv) !== c.n; break;
+    }
+    if (bad) violations.push(`线索${ci+1}: ${c.original.replace(/^\d+[\.\)、]\s*/, '')}`);
+  });
+  return violations;
+}
+
 function onDragStart(e, di, vi, from, fromPos, fromSlot) {
   dragData = { dimIdx: di, valIdx: vi, from, fromPos: fromPos ?? null, fromSlot: fromSlot ?? null };
   e.dataTransfer.effectAllowed = 'move';
@@ -364,8 +401,14 @@ function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
 function onDrop(e, di, pi) {
   e.preventDefault(); e.currentTarget.classList.remove('drag-over');
   if (!dragData || dragData.dimIdx !== di) return;
-  save();
   const { valIdx, from, fromPos, fromSlot } = dragData;
+  // 约束检测
+  const violations = checkDropViolations(di, valIdx, pi);
+  if (violations.length > 0) {
+    alert(`不能放入 ${pi+1} 号位置，与以下线索冲突：\n\n${violations.join('\n')}`);
+    dragData = null; return;
+  }
+  save();
   const existing = getPlaced(di, pi);
   // 清除来源
   if (from === 'grid' && fromPos !== null) clearPlaced(di, fromPos);
