@@ -224,7 +224,7 @@ function parseAndBuild() {
   let posCount = 0, posLineIdx = -1;
   for (let i = 0; i < merged.length; i++) { const m = merged[i].match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i); if (m) { posCount = parseInt(m[1]); posLineIdx = i; break; } }
   const dims = [], dimLines = new Set(), vs = new Set(), vm = {};
-  function sq(s) { return s.replace(/^[\s''""`「『【]+/,'').replace(/[\s''""`」』】]+$/,''); }
+  function sq(s) { return s.replace(/^[\s''""`「『【]+/,'').replace(/[\s''""`」』】.。;；]+$/,''); }
   merged.forEach((line, idx) => {
     const ci = line.search(/[:：]/); if (ci < 0) return;
     const bef = line.substring(0,ci), aft = line.substring(ci+1);
