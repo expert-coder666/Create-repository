@@ -285,6 +285,7 @@ function parseAndBuild() {
   addStagingSlot(); // 初始1列
   history = [];
   renderAll();
+  autoFillDirect(true); // 解析后自动填入直接线索（静默模式）
 }
 function parseClue(text, original, vs, vm, pc) {
   const tl = text.toLowerCase();
@@ -555,7 +556,7 @@ function isClueMatched(clue) {
 }
 
 // ==================== 自动填入直接线索 ====================
-function autoFillDirect() {
+function autoFillDirect(silent) {
   const { dims, posCount, clues } = state;
   save();
   let filled = 0;
@@ -603,10 +604,9 @@ function autoFillDirect() {
   }
 
   renderGrid();
-  if (filled > 0) {
-    alert(`已自动填入 ${filled} 个直接线索`);
-  } else {
-    alert('没有可自动填入的直接线索（可能已全部填入或存在冲突）');
+  if (!silent) {
+    if (filled > 0) alert(`已自动填入 ${filled} 个直接线索`);
+    else alert('没有可自动填入的直接线索（可能已全部填入或存在冲突）');
   }
 }
 
@@ -648,7 +648,6 @@ function renderGrid() {
   let h = '';
   h += '<div class="toolbar">';
   h += '<span style="font-size:12px;color:#6b7280;">拖拽属性值到对应房子 · 不确定的先放暂存区联立 · 双击移除</span>';
-  h += `<div style="margin-left:auto;"><button class="btn btn-outline btn-sm" onclick="autoFillDirect()">📌 填入直接线索</button></div>`;
   h += '</div>';
 
   // ===== 主表 =====
