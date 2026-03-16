@@ -31,12 +31,13 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 .setup-textarea { width: 100%; min-height: 90px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; font-family: 'Menlo', monospace; line-height: 1.5; resize: vertical; }
 .setup-textarea:focus { outline: none; border-color: #667eea; }
 .clue-list { list-style: none; }
-.clue-item { padding: 5px 10px; font-size: 11px; margin-bottom: 1px; display: flex; gap: 6px; line-height: 1.4; transition: opacity 0.2s; }
+.clue-item { padding: 5px 10px; font-size: 11px; margin-bottom: 1px; display: flex; gap: 6px; line-height: 1.4; transition: opacity 0.2s; align-items: flex-start; }
 .clue-item:nth-child(odd) { background: #f9fafb; }
 .clue-item.matched { opacity: 0.5; }
 .clue-item.matched .clue-text { text-decoration: line-through; color: #9ca3af; }
 .clue-item .clue-badge { font-size: 10px; margin-left: 2px; }
 .clue-num { color: #9ca3af; font-weight: 700; min-width: 20px; }
+.clue-chk { margin-top: 2px; cursor: pointer; accent-color: #667eea; flex-shrink: 0; }
 
 /* ===== 拖拽网格 ===== */
 .grid-table { border-collapse: collapse; width: 100%; }
@@ -92,6 +93,13 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 .staging-cell.has-value { background: #fef3c7; }
 .add-col-btn { background: #f8fafc; border: 2px dashed #d1d5db; color: #9ca3af; font-size: 18px; cursor: pointer; min-width: 60px; transition: all 0.15s; }
 .add-col-btn:hover { border-color: #f59e0b; color: #f59e0b; background: #fffbeb; }
+.staging-ops { display: flex; gap: 4px; justify-content: center; padding: 4px; }
+.staging-ops button { background: none; border: 1px solid rgba(255,255,255,0.5); color: rgba(255,255,255,0.8); font-size: 10px; border-radius: 3px; cursor: pointer; padding: 1px 5px; line-height: 1.3; }
+.staging-ops button:hover { background: rgba(255,255,255,0.2); color: #fff; border-color: #fff; }
+.promote-row td { padding: 4px !important; height: auto !important; border-top: none !important; }
+.promote-btn { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; border-radius: 4px; font-size: 10px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.promote-btn:hover { opacity: 0.85; }
+.promote-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -130,7 +138,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 // ==================== 状态 ====================
 // placement[dimIdx][posIdx] = valIdx | null
 // staging[slotIdx][dimIdx] = valIdx | null  (暂存区，无编号的分组槽)
-let state = { posCount: 0, dims: [], clues: [], placement: [], staging: [] };
+let state = { posCount: 0, dims: [], clues: [], placement: [], staging: [], manualChecked: [] };
 let history = [];
 function stagingCount() { return state.staging.length; }
 
@@ -234,7 +242,7 @@ function parseAndBuild() {
     if (cleaned.length >= 4) cl.push({ original: line, text: cleaned });
   });
   const clues = cl.map(c => parseClue(c.text, c.original, vs, vm, posCount));
-  state = { posCount, dims, clues, placement: [], staging: [] };
+  state = { posCount, dims, clues, placement: [], staging: [], manualChecked: [] };
   for (let d = 0; d < dims.length; d++) { state.placement[d] = []; for (let p = 0; p < posCount; p++) state.placement[d][p] = null; }
   addStagingSlot(); // 初始1列
   history = [];
@@ -274,6 +282,7 @@ function setStaging(s, d, vi) { state.staging[s][d] = vi; }
 function clearStaging(s, d) { state.staging[s][d] = null; }
 function isStagingSlotEmpty(s) { return state.staging[s].every(v => v === null); }
 function addStagingSlot() { const slot = []; for (let d = 0; d < state.dims.length; d++) slot.push(null); state.staging.push(slot); }
+function insertStagingSlot(afterIdx) { const slot = []; for (let d = 0; d < state.dims.length; d++) slot.push(null); state.staging.splice(afterIdx + 1, 0, slot); }
 function removeStagingSlot(s) { if (state.staging.length <= 1) return; state.staging.splice(s, 1); }
 function isValPlaced(d, vi) {
   if (state.placement[d].indexOf(vi) >= 0) return true;
@@ -281,8 +290,8 @@ function isValPlaced(d, vi) {
   return false;
 }
 
-function save() { history.push(JSON.parse(JSON.stringify({ p: state.placement, s: state.staging }))); if (history.length > 200) history.shift(); }
-function undo() { if (!history.length) return; const prev = history.pop(); state.placement = prev.p; state.staging = prev.s; renderGrid(); }
+function save() { history.push(JSON.parse(JSON.stringify({ p: state.placement, s: state.staging, m: state.manualChecked }))); if (history.length > 200) history.shift(); }
+function undo() { if (!history.length) return; const prev = history.pop(); state.placement = prev.p; state.staging = prev.s; state.manualChecked = prev.m || []; renderGrid(); }
 function resetAll() {
   save();
   for (let d = 0; d < state.dims.length; d++) for (let p = 0; p < state.posCount; p++) state.placement[d][p] = null;
@@ -372,6 +381,41 @@ function onDragOverBank(e, di) {
 function dblClickCell(di, pi) { if (getPlaced(di, pi) === null) return; save(); clearPlaced(di, pi); renderGrid(); }
 function dblClickStaging(di, si) { if (getStaging(si, di) === null) return; save(); clearStaging(si, di); renderGrid(); }
 function delStagingCol(s) { if (stagingCount() <= 1) return; save(); removeStagingSlot(s); if (stagingCount() === 0) addStagingSlot(); renderGrid(); }
+function insStagingCol(s) { save(); insertStagingSlot(s); renderGrid(); }
+function toggleClueManual(idx) {
+  const set = new Set(state.manualChecked);
+  if (set.has(idx)) set.delete(idx); else set.add(idx);
+  state.manualChecked = [...set];
+  renderClues();
+}
+function promoteSlot(s) {
+  // 弹出选择目标位置号
+  const { dims, posCount } = state;
+  const slot = state.staging[s];
+  const hasVal = slot.some(v => v !== null);
+  if (!hasVal) return;
+  // 构建可选位置：仅显示不会产生冲突的位置（或全部显示让用户选）
+  const opts = [];
+  for (let p = 0; p < posCount; p++) opts.push(`${p + 1} 号`);
+  const choice = prompt(`将 组${String.fromCharCode(65 + s)} 的内容放入哪个位置？\n输入位置号 (1-${posCount})：`);
+  if (!choice) return;
+  const pi = parseInt(choice) - 1;
+  if (isNaN(pi) || pi < 0 || pi >= posCount) { alert('无效位置号'); return; }
+  save();
+  // 将暂存组的每个维度值放入主表对应位置
+  for (let d = 0; d < dims.length; d++) {
+    const vi = slot[d];
+    if (vi === null) continue;
+    // 如果目标位置已有该维度的值，先移回bank
+    const existing = getPlaced(d, pi);
+    if (existing !== null) clearPlaced(d, pi);
+    setPlaced(d, pi, vi);
+    clearStaging(s, d);
+  }
+  // 如果该暂存列变空了，删除之（保留至少1列）
+  if (isStagingSlotEmpty(s) && stagingCount() > 1) removeStagingSlot(s);
+  renderGrid();
+}
 
 // ==================== 线索匹配检测 ====================
 function findValPos(valName) {
@@ -483,14 +527,21 @@ function renderClues() {
   const panel = document.getElementById('cluePanel');
   document.getElementById('clueCount').textContent = `(${state.clues.length})`;
   if (!state.clues.length) { panel.innerHTML = '<div style="padding:12px;color:#9ca3af;font-size:12px;text-align:center;">无线索</div>'; return; }
+  const manualSet = new Set(state.manualChecked || []);
   let matchedCount = 0;
   let h = '<ul class="clue-list">';
   state.clues.forEach((c, i) => {
-    const matched = isClueMatched(c);
+    const autoMatched = isClueMatched(c);
+    const manual = manualSet.has(i);
+    const matched = autoMatched || manual;
     if (matched) matchedCount++;
     const mc = matched ? ' matched' : '';
-    const icon = !c.ok ? '⚠️' : (matched ? '✅' : '🔲');
-    h += `<li class="clue-item${mc}"><span class="clue-num">${i+1}.</span><span class="clue-text">${icon} ${esc(c.original.replace(/^\d+[\.\)、]\s*/,''))}</span></li>`;
+    const icon = !c.ok ? '⚠️' : (autoMatched ? '✅' : (manual ? '☑️' : '🔲'));
+    h += `<li class="clue-item${mc}">`;
+    h += `<input type="checkbox" class="clue-chk" ${matched ? 'checked' : ''} onchange="toggleClueManual(${i})" title="手动标记已使用">`;
+    h += `<span class="clue-num">${i+1}.</span>`;
+    h += `<span class="clue-text">${icon} ${esc(c.original.replace(/^\d+[\.\)、]\s*/,''))}</span>`;
+    h += '</li>';
   });
   h += '</ul>';
   if (state.clues.length > 0) {
@@ -543,8 +594,12 @@ function renderGrid() {
   h += '<table class="grid-table staging-table"><thead><tr>';
   h += '<th style="background:#f1f5f9;min-width:80px;font-size:12px;color:#64748b;">维度</th>';
   for (let s = 0; s < sc; s++) {
-    h += `<th class="staging-hdr">组 ${String.fromCharCode(65 + s)}`;
-    if (sc > 1) h += `<button class="del-col" onclick="delStagingCol(${s})" title="删除此列">×</button>`;
+    h += '<th class="staging-hdr">';
+    h += `<div>组 ${String.fromCharCode(65 + s)}</div>`;
+    h += '<div class="staging-ops">';
+    h += `<button onclick="insStagingCol(${s})" title="在右侧插入新列">+列</button>`;
+    if (sc > 1) h += `<button onclick="delStagingCol(${s})" title="删除此列">删</button>`;
+    h += '</div>';
     h += '</th>';
   }
   h += '</tr></thead><tbody>';
@@ -563,6 +618,15 @@ function renderGrid() {
     h += '</tr>';
     if (di < dims.length - 1) h += `<tr class="dim-sep"><td colspan="${sc + 1}"></td></tr>`;
   });
+  // 提升到主表行
+  h += `<tr class="promote-row"><th style="background:#f1f5f9;font-size:10px;color:#9ca3af;padding:4px;">⬆ 确定</th>`;
+  for (let s = 0; s < sc; s++) {
+    const hasVal = state.staging[s].some(v => v !== null);
+    h += `<td style="text-align:center;padding:4px;">`;
+    if (hasVal) h += `<button class="promote-btn" onclick="promoteSlot(${s})">⬆ 放入主表</button>`;
+    h += '</td>';
+  }
+  h += '</tr>';
   h += '</tbody></table>';
 
   // 完成度
