@@ -394,30 +394,34 @@ function toggleClueManual(idx, event) {
   renderClues();
 }
 function promoteSlot(s) {
-  // 弹出选择目标位置号
   const { dims, posCount } = state;
   const slot = state.staging[s];
   const hasVal = slot.some(v => v !== null);
   if (!hasVal) return;
-  // 构建可选位置：仅显示不会产生冲突的位置（或全部显示让用户选）
-  const opts = [];
-  for (let p = 0; p < posCount; p++) opts.push(`${p + 1} 号`);
   const choice = prompt(`将 组${String.fromCharCode(65 + s)} 的内容放入哪个位置？\n输入位置号 (1-${posCount})：`);
   if (!choice) return;
   const pi = parseInt(choice) - 1;
   if (isNaN(pi) || pi < 0 || pi >= posCount) { alert('无效位置号'); return; }
+  // 冲突检测：检查目标位置是否已有同维度的值
+  const conflicts = [];
+  for (let d = 0; d < dims.length; d++) {
+    if (slot[d] === null) continue;
+    const existing = getPlaced(d, pi);
+    if (existing !== null) {
+      conflicts.push(`${dims[d].name}：${pi+1}号已有「${dims[d].values[existing]}」，与暂存的「${dims[d].values[slot[d]]}」冲突`);
+    }
+  }
+  if (conflicts.length > 0) {
+    alert(`无法放入 ${pi+1} 号位置，存在冲突：\n\n${conflicts.join('\n')}\n\n请先移除冲突项再操作。`);
+    return;
+  }
   save();
-  // 将暂存组的每个维度值放入主表对应位置
   for (let d = 0; d < dims.length; d++) {
     const vi = slot[d];
     if (vi === null) continue;
-    // 如果目标位置已有该维度的值，先移回bank
-    const existing = getPlaced(d, pi);
-    if (existing !== null) clearPlaced(d, pi);
     setPlaced(d, pi, vi);
     clearStaging(s, d);
   }
-  // 如果该暂存列变空了，删除之（保留至少1列）
   if (isStagingSlotEmpty(s) && stagingCount() > 1) removeStagingSlot(s);
   renderGrid();
 }
