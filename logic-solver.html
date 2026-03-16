@@ -477,56 +477,60 @@ function isClueMatched(clue) {
   return false;
 }
 
-// ==================== 自动求解 ====================
-function autoSolve() {
+// ==================== 自动填入直接线索 ====================
+function autoFillDirect() {
+  const { dims, posCount, clues } = state;
   save();
-  const { dims, posCount } = state;
-  const domain = {};
-  dims.forEach(d => d.values.forEach(v => { domain[v] = []; for (let p = 1; p <= posCount; p++) domain[v].push(p); }));
-  // 从已放置项提取约束
-  dims.forEach((d, di) => {
-    for (let p = 0; p < posCount; p++) {
-      const vi = getPlaced(di, p);
-      if (vi !== null) domain[d.values[vi]] = [p + 1];
+  let filled = 0;
+
+  // 1) at_pos 类型：某值在某位置
+  clues.forEach(c => {
+    if (!c.ok || c.type !== 'at_pos' || !c.a) return;
+    const pos = c.n - 1;
+    for (let di = 0; di < dims.length; di++) {
+      const vi = dims[di].values.indexOf(c.a);
+      if (vi < 0) continue;
+      if (getPlaced(di, pos) === vi) break;
+      if (getPlaced(di, pos) !== null) break;
+      if (isValPlaced(di, vi)) break;
+      setPlaced(di, pos, vi);
+      filled++;
+      break;
     }
   });
-  const constraints = [];
-  dims.forEach(d => constraints.push({ type:'alldiff', vars: d.values.slice() }));
-  state.clues.filter(c => c.ok && c.type !== 'unknown').forEach(c => {
-    const rv = v => { if (!v) return null; if (v.startsWith('__pos_')) return {type:'const',val:parseInt(v.replace('__pos_',''))}; return {type:'var',val:v}; };
-    constraints.push({ clueType: c.type, a: rv(c.a), b: rv(c.b), n: c.n||1 });
-  });
-  const varNames = Object.keys(domain);
-  const sorted = varNames.slice().sort((a,b) => domain[a].length - domain[b].length);
-  const asgn = {}; let solution = null;
-  function gv(r) { return r ? (r.type==='const' ? r.val : (asgn[r.val]??null)) : null; }
-  function check() {
-    for (const con of constraints) {
-      if (con.type==='alldiff') { const as=con.vars.filter(v=>asgn[v]).map(v=>asgn[v]); if(new Set(as).size!==as.length) return false; continue; }
-      const av=gv(con.a),bv=gv(con.b); if(av==null||bv==null) continue;
-      switch(con.clueType) {
-        case 'same': if(av!==bv) return false; break; case 'not_same': if(av===bv) return false; break;
-        case 'at_pos': if(av!==bv) return false; break; case 'not_at_pos': if(av===bv) return false; break;
-        case 'left_of': if(bv-av!==1) return false; break; case 'right_of': if(av-bv!==1) return false; break;
-        case 'left_any': if(av>=bv) return false; break; case 'right_any': if(av<=bv) return false; break;
-        case 'adjacent': if(Math.abs(av-bv)!==1) return false; break; case 'not_adjacent': if(Math.abs(av-bv)===1) return false; break;
-        case 'distance': if(Math.abs(av-bv)!==con.n) return false; break;
+
+  // 2) same 类型：如果其中一个已在主表，把另一个也填入同位置
+  let changed = true;
+  while (changed) {
+    changed = false;
+    clues.forEach(c => {
+      if (!c.ok || c.type !== 'same' || !c.a || !c.b) return;
+      const aPos = findValPos(c.a), bPos = findValPos(c.b);
+      if (aPos !== null && bPos !== null) return;
+      if (aPos === null && bPos === null) return;
+      const knownPos = aPos ?? bPos;
+      const unknownVal = aPos !== null ? c.b : c.a;
+      const pi = knownPos - 1;
+      for (let di = 0; di < dims.length; di++) {
+        const vi = dims[di].values.indexOf(unknownVal);
+        if (vi < 0) continue;
+        if (getPlaced(di, pi) === vi) break;
+        if (getPlaced(di, pi) !== null) break;
+        if (isValPlaced(di, vi)) break;
+        setPlaced(di, pi, vi);
+        filled++;
+        changed = true;
+        break;
       }
-    } return true;
-  }
-  function bt(idx) { if(solution)return; if(idx===sorted.length){solution={...asgn};return;} const v=sorted[idx]; for(const val of domain[v]){asgn[v]=val;if(check())bt(idx+1);delete asgn[v];} }
-  bt(0);
-  if (!solution) { alert('无解！请检查已放置的值或线索。'); return; }
-  // 填入（同时清空暂存区）
-  state.staging = []; addStagingSlot();
-  dims.forEach((d, di) => {
-    d.values.forEach((v, vi) => {
-      const pos = solution[v];
-      for (let p = 0; p < posCount; p++) state.placement[di][p] = null;
     });
-    d.values.forEach((v, vi) => { state.placement[di][solution[v] - 1] = vi; });
-  });
+  }
+
   renderGrid();
+  if (filled > 0) {
+    alert(`已自动填入 ${filled} 个直接线索`);
+  } else {
+    alert('没有可自动填入的直接线索（可能已全部填入或存在冲突）');
+  }
 }
 
 // ==================== 渲染 ====================
@@ -567,7 +571,7 @@ function renderGrid() {
   let h = '';
   h += '<div class="toolbar">';
   h += '<span style="font-size:12px;color:#6b7280;">拖拽属性值到对应房子 · 不确定的先放暂存区联立 · 双击移除</span>';
-  h += `<div style="margin-left:auto;"><button class="btn btn-outline btn-sm" onclick="autoSolve()">⚡ 自动求解</button></div>`;
+  h += `<div style="margin-left:auto;"><button class="btn btn-outline btn-sm" onclick="autoFillDirect()">📌 填入直接线索</button></div>`;
   h += '</div>';
 
   // ===== 主表 =====
