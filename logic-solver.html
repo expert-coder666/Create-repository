@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>逻辑推理 - 拖拽式网格助手</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.header h1 { font-size: 20px; }
+.header-actions { display: flex; gap: 8px; margin-left: auto; }
+.btn { padding: 6px 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-w { background: rgba(255,255,255,0.2); color: #fff; }
+.btn-w:hover { background: rgba(255,255,255,0.35); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.btn-primary { background: #667eea; color: #fff; }
+.btn-outline { background: #fff; color: #667eea; border: 1px solid #d1d5db; }
+.btn-outline:hover { border-color: #667eea; background: #f0f3ff; }
+
+.layout { display: flex; height: calc(100vh - 52px); }
+.sidebar { width: 300px; background: #fff; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; }
+.main { flex: 1; overflow: auto; padding: 20px; }
+
+.sb-section { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; }
+.sb-title { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.sb-scroll { flex: 1; overflow-y: auto; }
+.tpl-btn { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; cursor: pointer; font-size: 12px; margin-bottom: 4px; }
+.tpl-btn:hover { border-color: #667eea; color: #667eea; background: #f0f3ff; }
+.setup-textarea { width: 100%; min-height: 90px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; font-family: 'Menlo', monospace; line-height: 1.5; resize: vertical; }
+.setup-textarea:focus { outline: none; border-color: #667eea; }
+.clue-list { list-style: none; }
+.clue-item { padding: 5px 10px; font-size: 11px; margin-bottom: 1px; display: flex; gap: 6px; line-height: 1.4; transition: opacity 0.2s; }
+.clue-item:nth-child(odd) { background: #f9fafb; }
+.clue-item.matched { opacity: 0.5; }
+.clue-item.matched .clue-text { text-decoration: line-through; color: #9ca3af; }
+.clue-item .clue-badge { font-size: 10px; margin-left: 2px; }
+.clue-num { color: #9ca3af; font-weight: 700; min-width: 20px; }
+
+/* ===== 拖拽网格 ===== */
+.grid-table { border-collapse: collapse; width: 100%; }
+.grid-table th, .grid-table td { border: 1px solid #e2e8f0; text-align: center; vertical-align: middle; }
+.grid-table th.pos-hdr { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 10px 8px; font-size: 13px; min-width: 90px; }
+.grid-table th.dim-hdr { background: #4338ca; color: #fff; font-size: 12px; padding: 6px 12px; text-align: left; font-weight: 600; }
+.grid-table th.bank-hdr { background: #f1f5f9; color: #64748b; font-size: 11px; padding: 6px 8px; min-width: 160px; }
+.grid-table td.drop-cell {
+  height: 48px; min-width: 90px; padding: 4px;
+  background: #fafbfc; transition: background 0.15s;
+  vertical-align: middle;
+}
+.grid-table td.drop-cell.drag-over { background: #e0e7ff; outline: 2px dashed #667eea; outline-offset: -2px; }
+.grid-table td.drop-cell.has-value { background: #f0fdf4; }
+.grid-table td.bank-cell { background: #f8fafc; padding: 6px 8px; text-align: left; vertical-align: middle; }
+
+/* 属性标签 */
+.tag {
+  display: inline-block; padding: 4px 12px; margin: 2px;
+  border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: grab; user-select: none; transition: all 0.15s;
+  border: 1.5px solid transparent;
+}
+.tag:active { cursor: grabbing; }
+.tag.dragging { opacity: 0.4; }
+
+/* 每个维度不同颜色 */
+.tag-0 { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+.tag-1 { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+.tag-2 { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.tag-3 { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.tag-4 { background: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
+.tag-5 { background: #ffe4e6; color: #9f1239; border-color: #fda4af; }
+.tag-6 { background: #ccfbf1; color: #115e59; border-color: #5eead4; }
+
+/* 放入cell后的标签稍大 */
+.tag-in-cell { padding: 5px 14px; font-size: 13px; }
+
+/* 维度分隔 */
+.dim-sep td { height: 4px; padding: 0; background: linear-gradient(135deg, #667eea, #764ba2); border: none; }
+
+.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.status { margin-top: 14px; padding: 10px 14px; background: #fff; border-radius: 8px; font-size: 12px; color: #6b7280; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.status .ok { color: #059669; font-weight: 600; }
+.status .warn { color: #d97706; font-weight: 600; }
+
+/* 暂存联立区 */
+.staging-table { margin-top: 0; }
+.staging-hdr { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 8px 8px; font-size: 12px; min-width: 80px; position: relative; }
+.staging-hdr .del-col { position: absolute; top: 2px; right: 4px; background: none; border: none; color: rgba(255,255,255,0.7); font-size: 13px; cursor: pointer; line-height: 1; padding: 0 2px; }
+.staging-hdr .del-col:hover { color: #fff; }
+.staging-cell { background: #fffbeb; }
+.staging-cell.has-value { background: #fef3c7; }
+.add-col-btn { background: #f8fafc; border: 2px dashed #d1d5db; color: #9ca3af; font-size: 18px; cursor: pointer; min-width: 60px; transition: all 0.15s; }
+.add-col-btn:hover { border-color: #f59e0b; color: #f59e0b; background: #fffbeb; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🧩 逻辑推理助手</h1>
+  <div class="header-actions">
+    <button class="btn btn-w" onclick="undo()" title="Ctrl+Z">↩ 撤销</button>
+    <button class="btn btn-w" onclick="resetAll()">🗑 重置</button>
+    <button class="btn btn-w" onclick="exportJSON()">💾 导出</button>
+    <button class="btn btn-w" onclick="document.getElementById('importFile').click()">📂 导入</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+  </div>
+</div>
+<div class="layout">
+  <div class="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">📦 模板</div>
+      <button class="tpl-btn" onclick="loadTpl('cn5')">🏠 中文5栋房子</button>
+      <button class="tpl-btn" onclick="loadTpl('house5')">🏠 英文5栋房子</button>
+      <button class="tpl-btn" onclick="loadTpl('einstein')">🐟 爱因斯坦谜题</button>
+    </div>
+    <div class="sb-section">
+      <div class="sb-title">📐 题目输入</div>
+      <textarea class="setup-textarea" id="rawInput" placeholder="粘贴题目原文…"></textarea>
+      <div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="parseAndBuild()">🔍 解析生成</button></div>
+    </div>
+    <div class="sb-section" style="flex-shrink:0;"><div class="sb-title">📋 线索 <span id="clueCount"></span></div></div>
+    <div class="sb-scroll" id="cluePanel"><div style="padding:12px;color:#9ca3af;font-size:12px;text-align:center;">选择模板或粘贴题目</div></div>
+  </div>
+  <div class="main" id="mainArea">
+    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9ca3af;font-size:14px;">← 粘贴题目或选择模板开始</div>
+  </div>
+</div>
+
+<script>
+// ==================== 状态 ====================
+// placement[dimIdx][posIdx] = valIdx | null
+// staging[slotIdx][dimIdx] = valIdx | null  (暂存区，无编号的分组槽)
+let state = { posCount: 0, dims: [], clues: [], placement: [], staging: [] };
+let history = [];
+function stagingCount() { return state.staging.length; }
+
+// ==================== 模板 ====================
+const TEMPLATES = {
+  cn5: `一排有5栋房子，从左到右编号1到5。
+- 每个人都有唯一的名字：'Daniel'、'Jessica'、'John'、'Robert'、'Sophia'
+- 每栋房子都有唯一的食物类型：'牛油果'、'香蕉'、'芒果'、'油桃'、'石榴'
+- 每个人都有唯一的国籍：'美国'、'哥伦比亚'、'印度'、'波兰'、'英国'
+- 每个人都有唯一的职业：'会计师'、'医生'、'裁缝'、'教师'、'兽医'
+- 每个人都有唯一的运动爱好：'篮球'、'帆船'、'赛艇'、'网球'、'排球'
+
+1. 喜欢赛艇的人是拥有芒果的人。
+2. 打篮球的房子紧挨着喜欢帆船的房子的左边。
+3. 有油桃的房子由印度国籍的人居住。
+4. 会计师是波兰国籍。
+5. 中间的房子是进行网球运动的场所。
+6. 美国国籍的人住在中间的房子。
+7. 喜欢石榴的房子紧挨着波兰国籍居民居住的房子的右边。
+8. Robert住在最左边的房子。
+9. 哥伦比亚国籍的人住在最右边的房子。
+10. 裁缝住在最右边的房子。
+11. 教师住在兽医房子的左边某处。
+12. Jessica住在John的左边某处。`,
+  house5: `There are 5 houses, numbered 1 to 5 from left to right.
+Names: Eric, Bob, Alice, Arnold, Peter
+Occupations: engineer, doctor, artist, lawyer, teacher
+Smoothies: desert, dragonfruit, lime, cherry, watermelon
+Children: Fred, Bella, Meredith, Samantha, Timothy
+
+1. Arnold resides in a house somewhere to the right of the teacher's house.
+2. The house numbered three has its child named Bella.
+3. The artist is the person whose child is Timothy.
+4. Alice occupies the house numbered three.
+5. The doctor lives directly to the left of the engineer.
+6. The engineer is the person who loves Desert smoothies.
+7. The person who is the mother of Fred holds the occupation of teacher.
+8. The engineer does not reside in the house numbered three.
+9. Bob prefers Dragonfruit smoothies.
+10. Peter's house is positioned somewhere to the right of the engineer's house.
+11. The individual who prefers Lime smoothies is the parent of Meredith.
+12. Meredith resides in the house numbered one.
+13. Cherry smoothie lover lives somewhere to the right of the person who loves Desert smoothies.`,
+  einstein: `There are 5 houses in a row, numbered 1 to 5.
+Nationalities: 英国人, 瑞典人, 丹麦人, 挪威人, 德国人
+Colors: 红, 绿, 白, 黄, 蓝
+Drinks: 茶, 咖啡, 牛奶, 啤酒, 水
+Cigarettes: PallMall, Dunhill, Blends, BlueMaster, Prince
+Pets: 狗, 鸟, 猫, 马, 鱼
+
+1. 英国人住在红色房子里。
+2. 瑞典人养了一条狗。
+3. 丹麦人喝茶。
+4. 绿色房子紧邻在白色房子的左边。
+5. 绿色房子的人喝咖啡。
+6. 抽PallMall烟的人养鸟。
+7. 黄色房子的人抽Dunhill。
+8. 住在中间房子(3号)的人喝牛奶。
+9. 挪威人住在第1间房子。
+10. 抽Blends的人住在养猫的人隔壁。
+11. 养马的人住在抽Dunhill的人隔壁。
+12. 抽BlueMaster的人喝啤酒。
+13. 德国人抽Prince。
+14. 挪威人住在蓝色房子隔壁。
+15. 抽Blends的人的邻居喝水。`
+};
+function loadTpl(k) { document.getElementById('rawInput').value = TEMPLATES[k]; parseAndBuild(); }
+
+// ==================== 解析 ====================
+function parseAndBuild() {
+  const raw = document.getElementById('rawInput').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  let posCount = 0;
+  for (const l of lines) { const m = l.match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i); if (m) { posCount = parseInt(m[1]); break; } }
+  const dims = [], dimLines = new Set(), vs = new Set(), vm = {};
+  function sq(s) { return s.replace(/^[\s''""`「『【]+/,'').replace(/[\s''""`」』】]+$/,''); }
+  lines.forEach((line, idx) => {
+    const ci = line.search(/[:：]/); if (ci < 0) return;
+    const bef = line.substring(0,ci), aft = line.substring(ci+1);
+    let vals = []; const qp = /[''""`「『]([^''""`」』]+)[''""`」』]/g; let qm;
+    while ((qm = qp.exec(aft)) !== null) vals.push(qm[1].trim());
+    if (vals.length < 2) vals = aft.split(/[,，、]/).map(s => sq(s.trim())).filter(s => s.length > 0 && s.length < 30);
+    if (vals.length < 2) return;
+    let dn = bef.replace(/^[-\s*•·]+/,'').trim();
+    const cm = dn.match(/(?:唯一的|不同的|独特的|各自的)(.+)$/); if (cm) dn = cm[1].trim();
+    const em = dn.match(/(?:unique|different)\s+(.+)$/i); if (em) dn = em[1].trim();
+    if (!dn || vals.length > 15) return;
+    dims.push({ name: dn, values: vals }); dimLines.add(idx);
+    vals.forEach(v => { vs.add(v.toLowerCase()); vm[v.toLowerCase()] = v; });
+  });
+  if (posCount === 0 && dims.length > 0) posCount = Math.max(...dims.map(d => d.values.length));
+  if (posCount === 0) posCount = 5;
+  const cl = [];
+  lines.forEach((line, idx) => {
+    if (dimLines.has(idx)) return;
+    if (/^(there\s+are|each\s+)/i.test(line) && !/\d+[\.\)、]/.test(line)) return;
+    if (/^[-*•]\s*(每|有\s*\d|there)/i.test(line)) return;
+    if (line.length < 5) return;
+    const cleaned = line.replace(/^\d+[\.\)、]\s*/,'').replace(/^[-*•]\s*/,'');
+    if (cleaned.length >= 4) cl.push({ original: line, text: cleaned });
+  });
+  const clues = cl.map(c => parseClue(c.text, c.original, vs, vm, posCount));
+  state = { posCount, dims, clues, placement: [], staging: [] };
+  for (let d = 0; d < dims.length; d++) { state.placement[d] = []; for (let p = 0; p < posCount; p++) state.placement[d][p] = null; }
+  addStagingSlot(); // 初始1列
+  history = [];
+  renderAll();
+}
+function parseClue(text, original, vs, vm, pc) {
+  const tl = text.toLowerCase();
+  const sorted = Array.from(vs).sort((a,b) => b.length - a.length);
+  const found = [], used = [];
+  function ov(s,e) { return used.some(r => s < r.e && e > r.s); }
+  sorted.forEach(v => { let sf=0; while(true){ const p=tl.indexOf(v,sf); if(p<0)break; const e=p+v.length; if(!ov(p,e)){found.push({val:vm[v],pos:p});used.push({s:p,e});break;} sf=p+1; } });
+  found.sort((a,b) => a.pos - b.pos);
+  const nw={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,first:1,second:2,third:3,fourth:4,fifth:5,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10};
+  let pn=null;
+  if(/最左|leftmost|first\s+house/i.test(tl))pn=1;
+  else if(/最右|rightmost|last\s+house/i.test(tl))pn=pc;
+  else if(/中间|middle/i.test(tl))pn=Math.ceil(pc/2);
+  else{for(const pat of[/(?:house|position|spot|#|第|位置)\s*(?:numbered?\s*)?([a-z\u4e00-\u9fff\d]+)/gi,/(?:numbered?|号)\s*([a-z\u4e00-\u9fff\d]+)/gi]){pat.lastIndex=0;let m;while((m=pat.exec(tl))!==null){const n=nw[m[1].toLowerCase()]||parseInt(m[1]);if(n>=1&&n<=pc){pn=n;break;}}if(pn)break;}}
+  const A=found[0]?.val||null,B=found[1]?.val||null;
+  if(pn!==null&&A){const neg=/not|doesn't|does not|不在|不住|不居/i.test(tl);return{type:neg?'not_at_pos':'at_pos',a:A,b:`__pos_${pn}`,n:pn,original,ok:true};}
+  if(/directly\s+(?:to\s+the\s+)?left|紧邻.*左|紧挨.*左/i.test(tl))return{type:'left_of',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(/directly\s+(?:to\s+the\s+)?right|紧邻.*右|紧挨.*右/i.test(tl))return{type:'right_of',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(/somewhere.*left|left\s+of|左边某处|的左边|在.*左边|左边/i.test(tl)&&!/紧邻|紧挨|directly/i.test(tl))return{type:'left_any',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(/somewhere.*right|right\s+of|右边某处|的右边|在.*右边|右边/i.test(tl)&&!/紧邻|紧挨|directly/i.test(tl))return{type:'right_any',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(/not\s+next|not\s+adjacent|不相邻|不挨着/i.test(tl))return{type:'not_adjacent',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(/next\s+to|neighbor|adjacent|隔壁|相邻|旁边|邻居|挨着/i.test(tl))return{type:'adjacent',a:A,b:B,n:1,original,ok:!!(A&&B)};
+  if(A&&B)return{type:'same',a:A,b:B,n:1,original,ok:true};
+  return{type:'unknown',a:A,b:B,n:1,original,ok:false};
+}
+
+// ==================== 数据操作 ====================
+function getPlaced(d, p) { return state.placement[d][p]; }
+function setPlaced(d, p, vi) { state.placement[d][p] = vi; }
+function clearPlaced(d, p) { state.placement[d][p] = null; }
+function getStaging(s, d) { return state.staging[s]?.[d] ?? null; }
+function setStaging(s, d, vi) { state.staging[s][d] = vi; }
+function clearStaging(s, d) { state.staging[s][d] = null; }
+function isStagingSlotEmpty(s) { return state.staging[s].every(v => v === null); }
+function addStagingSlot() { const slot = []; for (let d = 0; d < state.dims.length; d++) slot.push(null); state.staging.push(slot); }
+function removeStagingSlot(s) { if (state.staging.length <= 1) return; state.staging.splice(s, 1); }
+function isValPlaced(d, vi) {
+  if (state.placement[d].indexOf(vi) >= 0) return true;
+  for (let s = 0; s < stagingCount(); s++) { if (state.staging[s]?.[d] === vi) return true; }
+  return false;
+}
+
+function save() { history.push(JSON.parse(JSON.stringify({ p: state.placement, s: state.staging }))); if (history.length > 200) history.shift(); }
+function undo() { if (!history.length) return; const prev = history.pop(); state.placement = prev.p; state.staging = prev.s; renderGrid(); }
+function resetAll() {
+  save();
+  for (let d = 0; d < state.dims.length; d++) for (let p = 0; p < state.posCount; p++) state.placement[d][p] = null;
+  state.staging = [];
+  addStagingSlot();
+  renderGrid();
+}
+
+// ==================== 拖拽 ====================
+let dragData = null; // { dimIdx, valIdx, from: 'bank'|'grid'|'staging', fromPos, fromSlot }
+
+function onDragStart(e, di, vi, from, fromPos, fromSlot) {
+  dragData = { dimIdx: di, valIdx: vi, from, fromPos: fromPos ?? null, fromSlot: fromSlot ?? null };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');
+  setTimeout(() => { if (e.target) e.target.classList.add('dragging'); }, 0);
+}
+function onDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragData = null;
+}
+
+// 主表格子
+function onDragOver(e, di, pi) {
+  if (!dragData || dragData.dimIdx !== di) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+function onDrop(e, di, pi) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (!dragData || dragData.dimIdx !== di) return;
+  save();
+  const { valIdx, from, fromPos, fromSlot } = dragData;
+  const existing = getPlaced(di, pi);
+  // 清除来源
+  if (from === 'grid' && fromPos !== null) clearPlaced(di, fromPos);
+  if (from === 'staging' && fromSlot !== null) clearStaging(fromSlot, di);
+  // 交换：如果目标已有值且来自格子
+  if (existing !== null && from === 'grid' && fromPos !== null) setPlaced(di, fromPos, existing);
+  // 放入目标
+  setPlaced(di, pi, valIdx);
+  dragData = null; renderGrid();
+}
+
+// 暂存区格子
+function onDragOverStaging(e, di, si) {
+  if (!dragData || dragData.dimIdx !== di) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onDropStaging(e, di, si) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (!dragData || dragData.dimIdx !== di) return;
+  save();
+  const { valIdx, from, fromPos, fromSlot } = dragData;
+  const existing = getStaging(si, di);
+  // 清除来源
+  if (from === 'grid' && fromPos !== null) clearPlaced(di, fromPos);
+  if (from === 'staging' && fromSlot !== null) clearStaging(fromSlot, di);
+  // 交换
+  if (existing !== null && from === 'staging' && fromSlot !== null) setStaging(fromSlot, di, existing);
+  if (existing !== null && from === 'grid' && fromPos !== null) setPlaced(di, fromPos, existing);
+  setStaging(si, di, valIdx);
+  // 自动扩列：如果最后一列不再全空，追加新列
+  if (!isStagingSlotEmpty(stagingCount() - 1)) addStagingSlot();
+  dragData = null; renderGrid();
+}
+
+// bank 区域
+function onDropBank(e, di) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (!dragData || dragData.dimIdx !== di) return;
+  save();
+  const { from, fromPos, fromSlot } = dragData;
+  if (from === 'grid' && fromPos !== null) clearPlaced(di, fromPos);
+  if (from === 'staging' && fromSlot !== null) clearStaging(fromSlot, di);
+  dragData = null; renderGrid();
+}
+function onDragOverBank(e, di) {
+  if (!dragData || dragData.dimIdx !== di || dragData.from === 'bank') return;
+  e.preventDefault(); e.currentTarget.classList.add('drag-over');
+}
+
+function dblClickCell(di, pi) { if (getPlaced(di, pi) === null) return; save(); clearPlaced(di, pi); renderGrid(); }
+function dblClickStaging(di, si) { if (getStaging(si, di) === null) return; save(); clearStaging(si, di); renderGrid(); }
+function delStagingCol(s) { if (stagingCount() <= 1) return; save(); removeStagingSlot(s); if (stagingCount() === 0) addStagingSlot(); renderGrid(); }
+
+// ==================== 线索匹配检测 ====================
+function findValPos(valName) {
+  // 在 placement 和 staging 中查找某属性值当前所在位置号(1-based)，未放置返回 null
+  const { dims, posCount } = state;
+  for (let di = 0; di < dims.length; di++) {
+    const vi = dims[di].values.indexOf(valName);
+    if (vi < 0) continue;
+    for (let p = 0; p < posCount; p++) { if (state.placement[di][p] === vi) return p + 1; }
+  }
+  return null;
+}
+function findValStagingSlot(valName) {
+  // 查找某值在暂存区哪个 slot，返回 slot 索引，不在则 null
+  const { dims } = state;
+  for (let di = 0; di < dims.length; di++) {
+    const vi = dims[di].values.indexOf(valName);
+    if (vi < 0) continue;
+    for (let s = 0; s < stagingCount(); s++) { if (state.staging[s][di] === vi) return s; }
+  }
+  return null;
+}
+function isClueMatched(clue) {
+  if (!clue.ok || clue.type === 'unknown') return false;
+  const resolveVal = (v) => {
+    if (!v) return null;
+    if (v.startsWith('__pos_')) return parseInt(v.replace('__pos_', ''));
+    return findValPos(v);
+  };
+  const av = resolveVal(clue.a), bv = resolveVal(clue.b);
+  // 对于 same 类型：如果两个值在同一暂存组也算匹配（联立了）
+  if (clue.type === 'same' && av === null && bv === null && clue.a && clue.b) {
+    const sa = findValStagingSlot(clue.a), sb = findValStagingSlot(clue.b);
+    if (sa !== null && sb !== null && sa === sb) return true;
+  }
+  if (av === null || bv === null) return false;
+  switch (clue.type) {
+    case 'same':       return av === bv;
+    case 'not_same':   return av !== bv;
+    case 'at_pos':     return av === bv;
+    case 'not_at_pos': return av !== bv;
+    case 'left_of':    return bv - av === 1;
+    case 'right_of':   return av - bv === 1;
+    case 'left_any':   return av < bv;
+    case 'right_any':  return av > bv;
+    case 'adjacent':   return Math.abs(av - bv) === 1;
+    case 'not_adjacent': return Math.abs(av - bv) !== 1;
+    case 'distance':   return Math.abs(av - bv) === clue.n;
+  }
+  return false;
+}
+
+// ==================== 自动求解 ====================
+function autoSolve() {
+  save();
+  const { dims, posCount } = state;
+  const domain = {};
+  dims.forEach(d => d.values.forEach(v => { domain[v] = []; for (let p = 1; p <= posCount; p++) domain[v].push(p); }));
+  // 从已放置项提取约束
+  dims.forEach((d, di) => {
+    for (let p = 0; p < posCount; p++) {
+      const vi = getPlaced(di, p);
+      if (vi !== null) domain[d.values[vi]] = [p + 1];
+    }
+  });
+  const constraints = [];
+  dims.forEach(d => constraints.push({ type:'alldiff', vars: d.values.slice() }));
+  state.clues.filter(c => c.ok && c.type !== 'unknown').forEach(c => {
+    const rv = v => { if (!v) return null; if (v.startsWith('__pos_')) return {type:'const',val:parseInt(v.replace('__pos_',''))}; return {type:'var',val:v}; };
+    constraints.push({ clueType: c.type, a: rv(c.a), b: rv(c.b), n: c.n||1 });
+  });
+  const varNames = Object.keys(domain);
+  const sorted = varNames.slice().sort((a,b) => domain[a].length - domain[b].length);
+  const asgn = {}; let solution = null;
+  function gv(r) { return r ? (r.type==='const' ? r.val : (asgn[r.val]??null)) : null; }
+  function check() {
+    for (const con of constraints) {
+      if (con.type==='alldiff') { const as=con.vars.filter(v=>asgn[v]).map(v=>asgn[v]); if(new Set(as).size!==as.length) return false; continue; }
+      const av=gv(con.a),bv=gv(con.b); if(av==null||bv==null) continue;
+      switch(con.clueType) {
+        case 'same': if(av!==bv) return false; break; case 'not_same': if(av===bv) return false; break;
+        case 'at_pos': if(av!==bv) return false; break; case 'not_at_pos': if(av===bv) return false; break;
+        case 'left_of': if(bv-av!==1) return false; break; case 'right_of': if(av-bv!==1) return false; break;
+        case 'left_any': if(av>=bv) return false; break; case 'right_any': if(av<=bv) return false; break;
+        case 'adjacent': if(Math.abs(av-bv)!==1) return false; break; case 'not_adjacent': if(Math.abs(av-bv)===1) return false; break;
+        case 'distance': if(Math.abs(av-bv)!==con.n) return false; break;
+      }
+    } return true;
+  }
+  function bt(idx) { if(solution)return; if(idx===sorted.length){solution={...asgn};return;} const v=sorted[idx]; for(const val of domain[v]){asgn[v]=val;if(check())bt(idx+1);delete asgn[v];} }
+  bt(0);
+  if (!solution) { alert('无解！请检查已放置的值或线索。'); return; }
+  // 填入（同时清空暂存区）
+  state.staging = []; addStagingSlot();
+  dims.forEach((d, di) => {
+    d.values.forEach((v, vi) => {
+      const pos = solution[v];
+      for (let p = 0; p < posCount; p++) state.placement[di][p] = null;
+    });
+    d.values.forEach((v, vi) => { state.placement[di][solution[v] - 1] = vi; });
+  });
+  renderGrid();
+}
+
+// ==================== 渲染 ====================
+function renderAll() { renderClues(); renderGrid(); }
+
+function renderClues() {
+  const panel = document.getElementById('cluePanel');
+  document.getElementById('clueCount').textContent = `(${state.clues.length})`;
+  if (!state.clues.length) { panel.innerHTML = '<div style="padding:12px;color:#9ca3af;font-size:12px;text-align:center;">无线索</div>'; return; }
+  let matchedCount = 0;
+  let h = '<ul class="clue-list">';
+  state.clues.forEach((c, i) => {
+    const matched = isClueMatched(c);
+    if (matched) matchedCount++;
+    const mc = matched ? ' matched' : '';
+    const icon = !c.ok ? '⚠️' : (matched ? '✅' : '🔲');
+    h += `<li class="clue-item${mc}"><span class="clue-num">${i+1}.</span><span class="clue-text">${icon} ${esc(c.original.replace(/^\d+[\.\)、]\s*/,''))}</span></li>`;
+  });
+  h += '</ul>';
+  if (state.clues.length > 0) {
+    const okClues = state.clues.filter(c => c.ok).length;
+    h += `<div style="padding:6px 10px;font-size:11px;color:#6b7280;border-top:1px solid #f3f4f6;">已满足 <b style="color:#059669;">${matchedCount}</b> / ${okClues} 条线索</div>`;
+  }
+  panel.innerHTML = h;
+}
+
+function renderGrid() {
+  const { dims, posCount } = state;
+  if (!dims.length) return;
+
+  let h = '';
+  h += '<div class="toolbar">';
+  h += '<span style="font-size:12px;color:#6b7280;">拖拽属性值到对应房子 · 不确定的先放暂存区联立 · 双击移除</span>';
+  h += `<div style="margin-left:auto;"><button class="btn btn-outline btn-sm" onclick="autoSolve()">⚡ 自动求解</button></div>`;
+  h += '</div>';
+
+  // ===== 主表 =====
+  h += '<table class="grid-table"><thead><tr>';
+  h += '<th style="background:#f1f5f9;min-width:80px;font-size:12px;color:#64748b;">维度</th>';
+  for (let p = 0; p < posCount; p++) h += `<th class="pos-hdr">${p+1} 号</th>`;
+  h += '<th class="bank-hdr">待放置</th>';
+  h += '</tr></thead><tbody>';
+
+  dims.forEach((dim, di) => {
+    const cc = `tag-${di % 7}`;
+    h += '<tr>';
+    h += `<th class="dim-hdr">${esc(dim.name)}</th>`;
+    for (let p = 0; p < posCount; p++) {
+      const vi = getPlaced(di, p);
+      const hc = vi !== null ? ' has-value' : '';
+      h += `<td class="drop-cell${hc}" ondragover="onDragOver(event,${di},${p})" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${di},${p})" ondblclick="dblClickCell(${di},${p})">`;
+      if (vi !== null) h += `<span class="tag tag-in-cell ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${vi},'grid',${p},null)" ondragend="onDragEnd(event)">${esc(dim.values[vi])}</span>`;
+      h += '</td>';
+    }
+    h += `<td class="bank-cell" ondragover="onDragOverBank(event,${di})" ondragleave="onDragLeave(event)" ondrop="onDropBank(event,${di})">`;
+    dim.values.forEach((val, vi) => {
+      if (!isValPlaced(di, vi)) h += `<span class="tag ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${vi},'bank',null,null)" ondragend="onDragEnd(event)">${esc(val)}</span>`;
+    });
+    h += '</td></tr>';
+    if (di < dims.length - 1) h += `<tr class="dim-sep"><td colspan="${posCount + 2}"></td></tr>`;
+  });
+  h += '</tbody></table>';
+
+  // ===== 暂存区 =====
+  const sc = stagingCount();
+  h += '<div style="margin-top:20px;font-size:13px;font-weight:700;color:#64748b;margin-bottom:8px;">🔗 暂存联立区 <span style="font-weight:400;font-size:11px;color:#9ca3af;">（不确定几号房子，但知道是同一组的放在同一列 · 拖入自动加列）</span></div>';
+  h += '<table class="grid-table staging-table"><thead><tr>';
+  h += '<th style="background:#f1f5f9;min-width:80px;font-size:12px;color:#64748b;">维度</th>';
+  for (let s = 0; s < sc; s++) {
+    h += `<th class="staging-hdr">组 ${String.fromCharCode(65 + s)}`;
+    if (sc > 1) h += `<button class="del-col" onclick="delStagingCol(${s})" title="删除此列">×</button>`;
+    h += '</th>';
+  }
+  h += '</tr></thead><tbody>';
+
+  dims.forEach((dim, di) => {
+    const cc = `tag-${di % 7}`;
+    h += '<tr>';
+    h += `<th class="dim-hdr">${esc(dim.name)}</th>`;
+    for (let s = 0; s < sc; s++) {
+      const vi = getStaging(s, di);
+      const hc = vi !== null ? ' has-value' : '';
+      h += `<td class="drop-cell staging-cell${hc}" ondragover="onDragOverStaging(event,${di},${s})" ondragleave="onDragLeave(event)" ondrop="onDropStaging(event,${di},${s})" ondblclick="dblClickStaging(${di},${s})">`;
+      if (vi !== null) h += `<span class="tag tag-in-cell ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${vi},'staging',null,${s})" ondragend="onDragEnd(event)">${esc(dim.values[vi])}</span>`;
+      h += '</td>';
+    }
+    h += '</tr>';
+    if (di < dims.length - 1) h += `<tr class="dim-sep"><td colspan="${sc + 1}"></td></tr>`;
+  });
+  h += '</tbody></table>';
+
+  // 完成度
+  let placed = 0, total = 0;
+  dims.forEach((d, di) => { for (let p = 0; p < posCount; p++) { total++; if (getPlaced(di, p) !== null) placed++; } });
+  const pct = total > 0 ? (placed / total * 100).toFixed(0) : 0;
+  h += `<div class="status">已放置 <span class="ok">${placed}</span> / ${total} · 完成度 <span class="${pct>=100?'ok':'warn'}">${pct}%</span></div>`;
+
+  document.getElementById('mainArea').innerHTML = h;
+  renderClues(); // 每次网格变化也刷新线索匹配状态
+}
+
+// ==================== 导入导出 ====================
+function exportJSON() { const b = new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='logic_puzzle.json'; a.click(); }
+function importJSON(e) { const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{try{state=JSON.parse(r.result);renderAll();}catch(err){alert('失败:'+err.message);}}; r.readAsText(f); e.target.value=''; }
+function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+document.addEventListener('keydown', e => { if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();} });
+</script>
+</body>
+</html>
