@@ -212,11 +212,20 @@ function parseAndBuild() {
   const raw = document.getElementById('rawInput').value.trim();
   if (!raw) return;
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  // 合并续行：如果上一行以逗号结尾，把当前行合并上去
+  const merged = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (merged.length > 0 && /[,，、]$/.test(merged[merged.length - 1])) {
+      merged[merged.length - 1] += ' ' + lines[i];
+    } else {
+      merged.push(lines[i]);
+    }
+  }
   let posCount = 0, posLineIdx = -1;
-  for (let i = 0; i < lines.length; i++) { const m = lines[i].match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i); if (m) { posCount = parseInt(m[1]); posLineIdx = i; break; } }
+  for (let i = 0; i < merged.length; i++) { const m = merged[i].match(/(\d+)\s*(houses|positions|栋|间|个位|格|people|persons|位|座|排)/i); if (m) { posCount = parseInt(m[1]); posLineIdx = i; break; } }
   const dims = [], dimLines = new Set(), vs = new Set(), vm = {};
   function sq(s) { return s.replace(/^[\s''""`「『【]+/,'').replace(/[\s''""`」』】]+$/,''); }
-  lines.forEach((line, idx) => {
+  merged.forEach((line, idx) => {
     const ci = line.search(/[:：]/); if (ci < 0) return;
     const bef = line.substring(0,ci), aft = line.substring(ci+1);
     let vals = []; const qp = /[''""`「『]([^''""`」』]+)[''""`」』]/g; let qm;
@@ -234,14 +243,21 @@ function parseAndBuild() {
   if (posCount === 0) posCount = 5;
   const cl = [];
   // 描述性/介绍性文本的正则，不应作为线索
-  const introRe = /唯一属性|唯一的|特征方面|住着不同|不同的人|编号为|编号从|从左到右|从右到左|from\s+left|left\s+to\s+right|in\s+a\s+row|numbered\s+\d+\s+to|each\s+(house|person|one)|每栋|每个人都有|每间|每所|每座|一排有|街对面/i;
-  lines.forEach((line, idx) => {
+  const introRe = /唯一属性|唯一的|特征方面|住着不同|不同的人|编号为|编号从|从左到右|从右到左|from\s+left|left\s+to\s+right|in\s+a\s+row|numbered\s+\d+\s+to|each\s+(house|person|one|individual)|每栋|每个人都有|每间|每所|每座|一排有|街对面|positioned\s+sequentially|across\s+the\s+street|occupied\s+by|distinct\s+individual|attributes\s+of|include:|here\s+are\s+the\s+clues|以下是|线索如下|clues\s+provided|accompanied\s+by/i;
+  // 收集维度中的值片段，用于检测被截断的维度续行（如 "Samantha, Timothy."）
+  const allDimVals = new Set();
+  dims.forEach(d => d.values.forEach(v => allDimVals.add(v.toLowerCase())));
+  merged.forEach((line, idx) => {
     if (dimLines.has(idx)) return;
     if (idx === posLineIdx) return;
-    if (/^(there\s+are|each\s+)/i.test(line) && !/\d+[\.\)、]/.test(line)) return;
+    if (/^(there\s+are|each\s+|five\s+|four\s+|three\s+|six\s+|seven\s+|eight\s+)/i.test(line) && !/\d+[\.\)、]/.test(line)) return;
     if (/^[-*•]\s*(每|有\s*\d|there)/i.test(line)) return;
     if (introRe.test(line) && !/\d+[\.\)、]/.test(line)) return;
     if (line.length < 5) return;
+    // 跳过纯由维度值+逗号组成的续行片段（如 "Samantha, Timothy."）
+    const stripped = line.replace(/[\s,，、.。]+/g, ' ').trim().replace(/\s+/g, ' ');
+    const parts = stripped.split(' ');
+    if (parts.length <= 4 && parts.every(p => allDimVals.has(p.toLowerCase().replace(/[.。]/g,'')))) return;
     const cleaned = line.replace(/^\d+[\.\)、]\s*/,'').replace(/^[-*•]\s*/,'');
     if (cleaned.length >= 4) cl.push({ original: line, text: cleaned });
   });
