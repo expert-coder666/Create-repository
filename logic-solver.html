@@ -426,6 +426,62 @@ function promoteSlot(s) {
   renderGrid();
 }
 
+// ==================== 自动填入直接线索 ====================
+function autoFillDirect() {
+  const { dims, posCount, clues } = state;
+  save();
+  let filled = 0;
+
+  // 1) at_pos 类型：某值在某位置
+  clues.forEach(c => {
+    if (!c.ok || c.type !== 'at_pos' || !c.a) return;
+    const pos = c.n - 1; // 0-based
+    for (let di = 0; di < dims.length; di++) {
+      const vi = dims[di].values.indexOf(c.a);
+      if (vi < 0) continue;
+      if (getPlaced(di, pos) === vi) break; // 已填
+      if (getPlaced(di, pos) !== null) break; // 有冲突，跳过
+      if (isValPlaced(di, vi)) break; // 该值已在别处
+      setPlaced(di, pos, vi);
+      filled++;
+      break;
+    }
+  });
+
+  // 2) same 类型：两个值属于同一人 —— 如果其中一个已在主表，把另一个也填入同位置
+  let changed = true;
+  while (changed) {
+    changed = false;
+    clues.forEach(c => {
+      if (!c.ok || c.type !== 'same' || !c.a || !c.b) return;
+      const aPos = findValPos(c.a), bPos = findValPos(c.b);
+      if (aPos !== null && bPos !== null) return; // 都已放
+      if (aPos === null && bPos === null) return; // 都未放
+      const knownPos = aPos ?? bPos;  // 1-based
+      const unknownVal = aPos !== null ? c.b : c.a;
+      const pi = knownPos - 1;
+      for (let di = 0; di < dims.length; di++) {
+        const vi = dims[di].values.indexOf(unknownVal);
+        if (vi < 0) continue;
+        if (getPlaced(di, pi) === vi) break;
+        if (getPlaced(di, pi) !== null) break;
+        if (isValPlaced(di, vi)) break;
+        setPlaced(di, pi, vi);
+        filled++;
+        changed = true;
+        break;
+      }
+    });
+  }
+
+  renderGrid();
+  if (filled > 0) {
+    alert(`已自动填入 ${filled} 个直接线索`);
+  } else {
+    alert('没有可自动填入的直接线索（可能已全部填入或存在冲突）');
+  }
+}
+
 // ==================== 线索匹配检测 ====================
 function findValPos(valName) {
   // 在 placement 和 staging 中查找某属性值当前所在位置号(1-based)，未放置返回 null
@@ -567,7 +623,7 @@ function renderGrid() {
   let h = '';
   h += '<div class="toolbar">';
   h += '<span style="font-size:12px;color:#6b7280;">拖拽属性值到对应房子 · 不确定的先放暂存区联立 · 双击移除</span>';
-  h += `<div style="margin-left:auto;"><button class="btn btn-outline btn-sm" onclick="autoSolve()">⚡ 自动求解</button></div>`;
+  h += `<div style="margin-left:auto;display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="autoFillDirect()">📌 填入直接线索</button><button class="btn btn-outline btn-sm" onclick="autoSolve()">⚡ 自动求解</button></div>`;
   h += '</div>';
 
   // ===== 主表 =====
