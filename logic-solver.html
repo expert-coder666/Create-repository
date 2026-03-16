@@ -75,6 +75,10 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 
 /* 放入cell后的标签稍大 */
 .tag-in-cell { padding: 5px 14px; font-size: 13px; }
+/* 候选标签（一个格子里有多个可能值） */
+.tag-candidate { padding: 2px 6px; font-size: 10px; opacity: 0.75; border-style: dashed; cursor: pointer; }
+.tag-candidate:hover { opacity: 1; }
+.cell-candidates { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-items: center; }
 
 /* 维度分隔 */
 .dim-sep td { height: 4px; padding: 0; background: linear-gradient(135deg, #667eea, #764ba2); border: none; }
@@ -104,7 +108,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f0f2f5; 
 </head>
 <body>
 <div class="header">
-  <h1>🧩 逻辑推理助手</h1>
+  <h1>🧩 逻辑推理助手 <span style="font-size:10px;opacity:0.5;">v3</span></h1>
   <div class="header-actions">
     <button class="btn btn-w" onclick="undo()" title="Ctrl+Z">↩ 撤销</button>
     <button class="btn btn-w" onclick="resetAll()">🗑 重置</button>
@@ -313,8 +317,33 @@ function parseClue(text, original, vs, vm, pc) {
 }
 
 // ==================== 数据操作 ====================
-function getPlaced(d, p) { return state.placement[d][p]; }
+// placement[d][p] 可以是: null(空), number(确定值), number[](候选值)
+function getPlaced(d, p) {
+  const v = state.placement[d][p];
+  if (Array.isArray(v)) return null; // 候选不算确定放置
+  return v;
+}
+function getCandidates(d, p) {
+  const v = state.placement[d][p];
+  if (Array.isArray(v)) return v;
+  return null;
+}
+function getRaw(d, p) { return state.placement[d][p]; } // 原始值
 function setPlaced(d, p, vi) { state.placement[d][p] = vi; }
+function addCandidate(d, p, vi) {
+  const cur = state.placement[d][p];
+  if (cur === null) { state.placement[d][p] = [vi]; }
+  else if (Array.isArray(cur)) { if (!cur.includes(vi)) cur.push(vi); }
+  else { state.placement[d][p] = [cur, vi]; } // 确定值变候选
+}
+function removeCandidate(d, p, vi) {
+  const cur = state.placement[d][p];
+  if (!Array.isArray(cur)) return;
+  const idx = cur.indexOf(vi);
+  if (idx >= 0) cur.splice(idx, 1);
+  if (cur.length === 0) state.placement[d][p] = null;
+  else if (cur.length === 1) state.placement[d][p] = cur[0]; // 剩1个自动确定
+}
 function clearPlaced(d, p) { state.placement[d][p] = null; }
 function getStaging(s, d) { return state.staging[s]?.[d] ?? null; }
 function setStaging(s, d, vi) { state.staging[s][d] = vi; }
@@ -324,7 +353,11 @@ function addStagingSlot() { const slot = []; for (let d = 0; d < state.dims.leng
 function insertStagingSlot(afterIdx) { const slot = []; for (let d = 0; d < state.dims.length; d++) slot.push(null); state.staging.splice(afterIdx + 1, 0, slot); }
 function removeStagingSlot(s) { if (state.staging.length <= 1) return; state.staging.splice(s, 1); }
 function isValPlaced(d, vi) {
-  if (state.placement[d].indexOf(vi) >= 0) return true;
+  for (let p = 0; p < state.posCount; p++) {
+    const v = state.placement[d][p];
+    if (v === vi) return true;
+    if (Array.isArray(v) && v.includes(vi)) return true;
+  }
   for (let s = 0; s < stagingCount(); s++) { if (state.staging[s]?.[d] === vi) return true; }
   return false;
 }
@@ -376,6 +409,31 @@ function checkDropViolations(dimIdx, valIdx, targetPos) {
     }
     if (bad) violations.push(`线索${ci+1}: ${c.original.replace(/^\d+[\.\)、]\s*/, '')}`);
   });
+  // 额外检测：如果有 at_pos 线索确认同维度的另一个值在此位置，则冲突
+  clues.forEach((c, ci) => {
+    if (!c.ok || c.type !== 'at_pos') return;
+    if (c.n !== tp) return; // 不是关于此位置的线索
+    for (let d = 0; d < dims.length; d++) {
+      const cvi = dims[d].values.indexOf(c.a);
+      if (cvi < 0) continue;
+      if (d === dimIdx && cvi !== valIdx) {
+        violations.push(`线索${ci+1}: ${c.original.replace(/^\d+[\.\)、]\s*/, '')}`);
+      }
+      break;
+    }
+  });
+  // 额外检测：如果目标位置已有确定值(非候选)且是同维度，检查该值是否被线索锁定在此位置
+  const existingRaw = dims[dimIdx] ? state.placement[dimIdx]?.[targetPos] : null;
+  if (typeof existingRaw === 'number') {
+    const existingName = dims[dimIdx].values[existingRaw];
+    // 检查是否有线索确认 existingName 必须在此位置
+    clues.forEach((c, ci) => {
+      if (!c.ok) return;
+      if (c.type === 'at_pos' && c.a === existingName && c.n === tp) {
+        violations.push(`${tp}号位置已由线索确定为「${existingName}」`);
+      }
+    });
+  }
   return violations;
 }
 
@@ -403,21 +461,32 @@ function onDrop(e, di, pi) {
   e.preventDefault(); e.currentTarget.classList.remove('drag-over');
   if (!dragData || dragData.dimIdx !== di) return;
   const { valIdx, from, fromPos, fromSlot } = dragData;
-  // 约束检测
+  const raw = getRaw(di, pi);
+  const hasExisting = raw !== null;
+  console.log('[onDrop] di=', di, 'pi=', pi, 'valIdx=', valIdx, 'raw=', raw, 'hasExisting=', hasExisting);
+  // 约束检测：始终检查，无论格子是否已有值
   const violations = checkDropViolations(di, valIdx, pi);
+  console.log('[onDrop] violations=', violations);
   if (violations.length > 0) {
     alert(`不能放入 ${pi+1} 号位置，与以下线索冲突：\n\n${violations.join('\n')}`);
     dragData = null; return;
   }
   save();
-  const existing = getPlaced(di, pi);
   // 清除来源
-  if (from === 'grid' && fromPos !== null) clearPlaced(di, fromPos);
+  if (from === 'grid' && fromPos !== null) {
+    const fromRaw = getRaw(di, fromPos);
+    if (Array.isArray(fromRaw)) removeCandidate(di, fromPos, valIdx);
+    else clearPlaced(di, fromPos);
+  }
   if (from === 'staging' && fromSlot !== null) clearStaging(fromSlot, di);
-  // 交换：如果目标已有值且来自格子
-  if (existing !== null && from === 'grid' && fromPos !== null) setPlaced(di, fromPos, existing);
   // 放入目标
-  setPlaced(di, pi, valIdx);
+  if (hasExisting) {
+    // 目标已有值，变为候选模式
+    addCandidate(di, pi, valIdx);
+  } else {
+    // 空格子，确定放入；如果来源是格子且目标有值则交换（此分支实际不会触发，因为hasExisting=false）
+    setPlaced(di, pi, valIdx);
+  }
   dragData = null; renderGrid();
 }
 
@@ -460,7 +529,8 @@ function onDragOverBank(e, di) {
   e.preventDefault(); e.currentTarget.classList.add('drag-over');
 }
 
-function dblClickCell(di, pi) { if (getPlaced(di, pi) === null) return; save(); clearPlaced(di, pi); renderGrid(); }
+function dblClickCell(di, pi) { if (getRaw(di, pi) === null) return; save(); clearPlaced(di, pi); renderGrid(); }
+function removeOneCandidate(di, pi, vi) { save(); removeCandidate(di, pi, vi); renderGrid(); }
 function dblClickStaging(di, si) { if (getStaging(si, di) === null) return; save(); clearStaging(si, di); renderGrid(); }
 function delStagingCol(s) { if (stagingCount() <= 1) return; save(); removeStagingSlot(s); if (stagingCount() === 0) addStagingSlot(); renderGrid(); }
 function insStagingCol(s) { save(); insertStagingSlot(s); renderGrid(); }
@@ -662,10 +732,22 @@ function renderGrid() {
     h += '<tr>';
     h += `<th class="dim-hdr">${esc(dim.name)}</th>`;
     for (let p = 0; p < posCount; p++) {
+      const raw = getRaw(di, p);
       const vi = getPlaced(di, p);
-      const hc = vi !== null ? ' has-value' : '';
+      const cands = getCandidates(di, p);
+      const hc = (vi !== null || cands) ? ' has-value' : '';
       h += `<td class="drop-cell${hc}" ondragover="onDragOver(event,${di},${p})" ondragleave="onDragLeave(event)" ondrop="onDrop(event,${di},${p})" ondblclick="dblClickCell(${di},${p})">`;
-      if (vi !== null) h += `<span class="tag tag-in-cell ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${vi},'grid',${p},null)" ondragend="onDragEnd(event)">${esc(dim.values[vi])}</span>`;
+      if (vi !== null) {
+        // 确定值：大标签
+        h += `<span class="tag tag-in-cell ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${vi},'grid',${p},null)" ondragend="onDragEnd(event)">${esc(dim.values[vi])}</span>`;
+      } else if (cands) {
+        // 候选值：多个小标签
+        h += '<div class="cell-candidates">';
+        cands.forEach(cvi => {
+          h += `<span class="tag tag-candidate ${cc}" draggable="true" ondragstart="onDragStart(event,${di},${cvi},'grid',${p},null)" ondragend="onDragEnd(event)" onclick="removeOneCandidate(${di},${p},${cvi})" title="点击移除此候选">${esc(dim.values[cvi])}</span>`;
+        });
+        h += '</div>';
+      }
       h += '</td>';
     }
     h += `<td class="bank-cell" ondragover="onDragOverBank(event,${di})" ondragleave="onDragLeave(event)" ondrop="onDropBank(event,${di})">`;
