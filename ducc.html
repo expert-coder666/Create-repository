@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ducc 工具台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐣</text></svg>">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;background:linear-gradient(135deg,#e0e7ff 0%,#fce7f3 50%,#e0e7ff 100%);font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden}
+
+  /* 鸭子 */
+  .duck{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;filter:drop-shadow(0 4px 14px rgba(0,0,0,.2));transition:transform .2s;animation:bob 2.5s ease-in-out infinite}
+  .duck:hover{animation:none;transform:scale(1.1)}
+  .duck:active{transform:scale(.92)}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+
+  /* 遮罩 */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.15);z-index:9998;opacity:0;pointer-events:none;transition:opacity .25s}
+  .overlay.open{opacity:1;pointer-events:auto}
+
+  /* 面板 */
+  .panel{position:fixed;bottom:112px;right:28px;width:320px;z-index:9999;background:#fff;border-radius:18px;box-shadow:0 12px 44px rgba(0,0,0,.18);transform:translateY(16px) scale(.92);opacity:0;pointer-events:none;transition:all .28s cubic-bezier(.4,0,.2,1);max-height:calc(100vh - 140px);display:flex;flex-direction:column}
+  .panel.open{transform:translateY(0) scale(1);opacity:1;pointer-events:auto}
+
+  .hdr{padding:16px 18px 12px;background:linear-gradient(135deg,#a78bfa,#f472b6);border-radius:18px 18px 0 0;color:#fff;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .hdr svg{width:32px;height:32px;flex-shrink:0}
+  .hdr-text h2{font-size:15px;font-weight:700}
+  .hdr-text p{font-size:10px;opacity:.8;margin-top:1px}
+  .hdr-btns{margin-left:auto;display:flex;gap:5px}
+  .hdr-btn{width:28px;height:28px;border-radius:8px;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+  .hdr-btn:hover{background:rgba(255,255,255,.4)}
+
+  .list-wrap{overflow-y:auto;flex:1;padding:6px 10px 8px}
+  .it{display:flex;align-items:center;gap:10px;padding:9px 10px;margin:3px 0;border-radius:11px;cursor:pointer;transition:all .15s;position:relative}
+  .it:hover{background:#f5f3ff;transform:translateX(3px)}
+  .it:active{transform:translateX(1px) scale(.98)}
+  .ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;color:#fff}
+  .inf{flex:1;min-width:0;overflow:hidden}
+  .nm{font-size:13px;font-weight:700;color:#1e1b4b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cm{font-size:10px;color:#8b5cf6;font-family:'SF Mono',Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ds{font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .ar{color:#c4b5fd;font-size:14px;transition:transform .15s;flex-shrink:0}
+  .it:hover .ar{transform:translateX(3px);color:#8b5cf6}
+
+  .del{display:none;position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:7px;border:none;background:#fee2e2;color:#ef4444;font-size:13px;cursor:pointer;align-items:center;justify-content:center;transition:background .12s}
+  .del:hover{background:#fca5a5}
+  .editing .del{display:flex}
+  .editing .ar{display:none}
+  .editing .it:hover{background:#fef2f2}
+
+  .ft{padding:8px 16px 12px;border-top:1px solid #f3f4f6;text-align:center;font-size:10px;color:#9ca3af;flex-shrink:0}
+  .ft a{color:#8b5cf6;text-decoration:none}
+
+  /* 表单 */
+  .form{display:none;padding:12px 14px;background:#faf5ff;border-top:1px solid #e9d5ff;flex-shrink:0}
+  .form.show{display:block}
+  .form-title{font-size:13px;font-weight:700;color:#6d28d9;margin-bottom:10px}
+  .form-row{display:flex;gap:8px;margin-bottom:7px;align-items:center}
+  .form-row label{font-size:11px;color:#6b7280;width:38px;flex-shrink:0;text-align:right}
+  .form-row input{flex:1;padding:6px 10px;border:1px solid #d4d4d8;border-radius:9px;font-size:12px;font-family:inherit;outline:none;transition:border .15s}
+  .form-row input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.1)}
+  .emoji-pick{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 8px 46px}
+  .emoji-opt{width:30px;height:30px;border-radius:8px;border:2px solid transparent;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .12s}
+  .emoji-opt:hover,.emoji-opt.sel{border-color:#8b5cf6;background:#ede9fe}
+  .color-row{display:flex;gap:5px;margin:4px 0 8px 46px}
+  .color-opt{width:24px;height:24px;border-radius:7px;border:2px solid transparent;cursor:pointer;transition:all .12s}
+  .color-opt:hover,.color-opt.sel{border-color:#1e1b4b;transform:scale(1.15)}
+  .form-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+  .btn{padding:6px 16px;border-radius:9px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+  .btn-cancel{background:#f4f4f5;color:#52525b}
+  .btn-cancel:hover{background:#e4e4e7}
+  .btn-save{background:#8b5cf6;color:#fff}
+  .btn-save:hover{background:#7c3aed}
+
+  .toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);background:rgba(30,27,75,.9);color:#fff;padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:all .2s;z-index:99999}
+  .toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+  .empty{text-align:center;padding:20px;color:#9ca3af;font-size:12px}
+
+  /* 首页背景装饰 */
+  .bg-text{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:1}
+  .bg-text h1{font-size:48px;margin-bottom:8px}
+  .bg-text p{font-size:16px;color:#6b7280}
+  .bg-text .sub{font-size:12px;color:#9ca3af;margin-top:6px}
+
+  @media(max-width:640px){
+    .panel{right:8px;left:8px;width:auto;bottom:100px}
+    .duck{right:16px;bottom:16px;width:64px;height:64px}
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-text">
+  <h1>🐣</h1>
+  <p>点击右下角的小鸭子</p>
+  <div class="sub">Ducc 工具台 · 你的专属快捷入口</div>
+</div>
+
+<div class="overlay" id="O"></div>
+
+<div class="panel" id="P">
+  <div class="hdr">
+    <svg viewBox="0 0 100 100" fill="none"><ellipse cx="50" cy="72" rx="32" ry="22" fill="#fbbf24"/><circle cx="50" cy="40" r="24" fill="#fbbf24"/><circle cx="41" cy="35" r="3.5" fill="#1e1b4b"/><circle cx="59" cy="35" r="3.5" fill="#1e1b4b"/><circle cx="42" cy="33.5" r="1.2" fill="#fff"/><circle cx="60" cy="33.5" r="1.2" fill="#fff"/><ellipse cx="50" cy="43" rx="6" ry="3.5" fill="#f97316"/><circle cx="38" cy="40" r="4" fill="#fde68a" opacity=".4"/></svg>
+    <div class="hdr-text"><h2>Ducc 工具台</h2><p>你的专属开发小助手</p></div>
+    <div class="hdr-btns">
+      <button class="hdr-btn" onclick="toggleEdit()" title="编辑" id="editBtn">✏️</button>
+      <button class="hdr-btn" onclick="showForm()" title="添加">＋</button>
+    </div>
+  </div>
+
+  <div class="form" id="F">
+    <div class="form-title">添加新工具</div>
+    <div class="form-row"><label>名称</label><input id="f_name" placeholder="工具名称" maxlength="20"></div>
+    <div class="form-row"><label>图标</label></div>
+    <div class="emoji-pick" id="emojiPick"></div>
+    <div class="form-row"><label>颜色</label></div>
+    <div class="color-row" id="colorPick"></div>
+    <div class="form-row"><label>链接</label><input id="f_url" placeholder="https://..."></div>
+    <div class="form-row"><label>描述</label><input id="f_desc" placeholder="可选的简短描述" maxlength="30"></div>
+    <div class="form-btns">
+      <button class="btn btn-cancel" onclick="hideForm()">取消</button>
+      <button class="btn btn-save" onclick="saveItem()">添加</button>
+    </div>
+  </div>
+
+  <div class="list-wrap" id="L"></div>
+  <div class="ft">点击打开链接 · 数据保存在浏览器本地<br>Made with <a href="https://expert-coder666.github.io/Create-repository/" target="_blank">Ducc</a></div>
+</div>
+
+<svg class="duck" id="D" onclick="toggle()" viewBox="0 0 100 100" fill="none">
+  <ellipse cx="50" cy="70" rx="30" ry="22" fill="#fbbf24"/>
+  <circle cx="50" cy="38" r="22" fill="#fbbf24"/>
+  <circle cx="42" cy="33" r="3" fill="#1e1b4b"/>
+  <circle cx="58" cy="33" r="3" fill="#1e1b4b"/>
+  <circle cx="43.2" cy="31.8" r="1.1" fill="#fff"/>
+  <circle cx="59.2" cy="31.8" r="1.1" fill="#fff"/>
+  <ellipse cx="50" cy="42" rx="7" ry="4" fill="#f97316"/>
+  <circle cx="36" cy="39" r="4" fill="#fde68a" opacity=".5"/>
+  <circle cx="64" cy="39" r="4" fill="#fde68a" opacity=".5"/>
+  <ellipse cx="24" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(-15 24 65)" opacity=".7"/>
+  <ellipse cx="76" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(15 76 65)" opacity=".7"/>
+  <ellipse cx="40" cy="90" rx="8" ry="3" fill="#f97316"/>
+  <ellipse cx="60" cy="90" rx="8" ry="3" fill="#f97316"/>
+</svg>
+
+<div class="toast" id="T"></div>
+
+<script>
+var DEFAULTS = [
+  {name:"文档数据分析",icon:"📊",url:"https://expert-coder666.github.io/Create-repository/",desc:"数据标注质量检查",color:"#0ea5e9"},
+  {name:"逻辑推理助手",icon:"🧠",url:"https://expert-coder666.github.io/Create-repository/logic-solver.html",desc:"爱因斯坦谜题求解",color:"#f43f5e"},
+  {name:"Matrix Puzzle",icon:"🧩",url:"https://expert-coder666.github.io/matrix-puzzle-solver/",desc:"ARC 矩阵题目求解",color:"#8b5cf6"},
+];
+
+var EMOJIS=["📰","🧩","📊","🧠","✨","🔧","📁","🎯","🚀","💡","🔍","📝","🎨","⚙️","🌐","📦","🛠️","💬","📌","🔑","🎮","📱","🖥️","🗂️"];
+var COLORS=["#f59e0b","#8b5cf6","#0ea5e9","#f43f5e","#10b981","#6366f1","#ec4899","#14b8a6","#f97316","#64748b"];
+
+var skills=[],editing=false,selEmoji="🔧",selColor="#8b5cf6";
+var P=document.getElementById('P'),O=document.getElementById('O'),L=document.getElementById('L'),F=document.getElementById('F'),T=document.getElementById('T');
+
+function load(){try{var d=localStorage.getItem('ducc_skills');if(d){skills=JSON.parse(d);return}}catch(e){}skills=DEFAULTS.slice();save()}
+function save(){localStorage.setItem('ducc_skills',JSON.stringify(skills))}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+function render(){
+  L.className='list-wrap'+(editing?' editing':'');
+  if(!skills.length){L.innerHTML='<div class="empty">暂无工具，点击 ＋ 添加</div>';return}
+  L.innerHTML=skills.map(function(s,i){
+    var sub=s.desc?'<div class="ds">'+esc(s.desc)+'</div>':'';
+    return '<div class="it" onclick="go('+i+')">'+
+      '<div class="ic" style="background:'+s.color+'">'+s.icon+'</div>'+
+      '<div class="inf"><div class="nm">'+esc(s.name)+'</div>'+
+      '<div class="cm">'+esc(s.url||'')+'</div>'+sub+'</div>'+
+      '<span class="ar">›</span>'+
+      '<button class="del" onclick="event.stopPropagation();del('+i+')">✕</button></div>';
+  }).join('');
+}
+
+var panelOpen=false;
+function toggle(){panelOpen=!panelOpen;P.classList.toggle('open',panelOpen);O.classList.toggle('open',panelOpen);if(!panelOpen){editing=false;hideForm();render()}}
+O.addEventListener('click',function(){if(panelOpen)toggle()});
+
+function go(i){
+  if(editing)return;
+  var s=skills[i];if(!s)return;
+  if(s.url)window.open(s.url,'_blank');
+}
+
+function del(i){skills.splice(i,1);save();render();toast('已删除')}
+
+function toggleEdit(){
+  editing=!editing;
+  document.getElementById('editBtn').style.background=editing?'rgba(255,255,255,.5)':'';
+  render();
+}
+
+function showForm(){
+  F.classList.add('show');
+  document.getElementById('f_name').value='';
+  document.getElementById('f_url').value='';
+  document.getElementById('f_desc').value='';
+  selEmoji=EMOJIS[0];selColor=COLORS[0];
+  renderPickers();
+}
+function hideForm(){F.classList.remove('show')}
+
+function renderPickers(){
+  document.getElementById('emojiPick').innerHTML=EMOJIS.map(function(e){
+    return '<div class="emoji-opt'+(e===selEmoji?' sel':'')+'" onclick="pickEmoji(\''+e+'\')">'+e+'</div>';
+  }).join('');
+  document.getElementById('colorPick').innerHTML=COLORS.map(function(c){
+    return '<div class="color-opt'+(c===selColor?' sel':'')+'" style="background:'+c+'" onclick="pickColor(\''+c+'\')"></div>';
+  }).join('');
+}
+function pickEmoji(e){selEmoji=e;renderPickers()}
+function pickColor(c){selColor=c;renderPickers()}
+
+function saveItem(){
+  var name=document.getElementById('f_name').value.trim();
+  if(!name){toast('请填写名称');return}
+  var url=document.getElementById('f_url').value.trim();
+  if(!url){toast('请填写链接');return}
+  if(!url.startsWith('http'))url='https://'+url;
+  var desc=document.getElementById('f_desc').value.trim();
+  skills.push({name:name,icon:selEmoji,url:url,desc:desc,color:selColor});
+  save();hideForm();render();
+  toast('已添加「'+name+'」');
+}
+
+function toast(msg){T.textContent=msg;T.classList.add('show');setTimeout(function(){T.classList.remove('show')},1300)}
+
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&panelOpen)toggle()});
+
+load();render();
+</script>
+</body>
+</html>
