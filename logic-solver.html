@@ -227,13 +227,19 @@ function parseAndBuild() {
       presplit.push(line);
     }
   }
-  // 合并续行：如果上一行以逗号结尾，把当前行合并上去
+  // 合并续行：(1)上一行以逗号结尾；或(2)当前行不以序号/冒号开头且上一行是线索行（处理线索文本跨行）
   const merged = [];
   for (let i = 0; i < presplit.length; i++) {
-    if (merged.length > 0 && /[,，、]$/.test(merged[merged.length - 1])) {
-      merged[merged.length - 1] += ' ' + presplit[i];
+    const prev = merged.length > 0 ? merged[merged.length - 1] : '';
+    const cur = presplit[i];
+    const prevEndsComma = /[,，、]$/.test(prev);
+    const curIsNewClue = /^\d+[\.\)、]/.test(cur);
+    const curHasColon = /[:：]/.test(cur);
+    const prevIsClue = /^\d+[\.\)、]/.test(prev);
+    if (merged.length > 0 && (prevEndsComma || (!curIsNewClue && !curHasColon && prevIsClue))) {
+      merged[merged.length - 1] += ' ' + cur;
     } else {
-      merged.push(presplit[i]);
+      merged.push(cur);
     }
   }
   // 数词映射
