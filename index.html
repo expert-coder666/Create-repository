@@ -961,16 +961,23 @@ function renderTextAnalysis(col, stats) {
     negLabels.forEach(([, info]) => info.originals.forEach(v => negOriginals.add(String(v))));
     const badRows = rawData.filter(r => negOriginals.has(String(r[col])));
     if (badRows.length > 0) {
-      const previewCols = columns.filter(c => {
+      // 问题预览列：当前分析列 + 它前面的原始数据列（src/tgt/query/response等）
+      const colIdx = columns.indexOf(col);
+      const previewCols = columns.filter((c, i) => {
         const cl = c.toLowerCase();
-        if (cl.includes('id')) return false;
+        if (cl.startsWith('__empty')) return false;
+        if (cl.includes('id') && cl.length <= 6) return false;  // 排除纯 ID 列（但保留如 src_id_info 等）
         // 备注列：只有内容非空时才展示
         if (cl.includes('备注')) {
           return badRows.some(r => { const v = r[c]; return v !== null && v !== undefined && String(v).trim() !== ''; });
         }
+        // 当前分析列必须包含
+        if (c === col) return true;
+        // 当前列之前的数据列全部包含（这些是原始数据上下文）
+        if (i < colIdx) return true;
+        // 当前列之后：只保留 query/response/备注等辅助列
         return cl.includes('query') || cl.includes('translate_query')
-          || cl.includes('response') || cl.includes('translate_response')
-          || c === col;
+          || cl.includes('response') || cl.includes('translate_response');
       });
       if (previewCols.indexOf(col) === -1) previewCols.unshift(col);
       const maxPreview = Math.min(badRows.length, 50);
