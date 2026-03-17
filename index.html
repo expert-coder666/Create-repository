@@ -628,9 +628,18 @@ function calcTextStats(values) {
 // ==================== 分析入口 ====================
 function analyzeSelected() {
   if (!selectedCols.size) return alert('请先选择要分析的列');
+  const cols = [...selectedCols];
+  // 预扫描：检查是否有未归类标签，有则弹窗让用户归类后再分析
+  const unclassified = scanUnclassifiedLabels(cols);
+  if (Object.keys(unclassified).length > 0) {
+    showClassificationModal(unclassified, () => doAnalysis(cols));
+  } else {
+    doAnalysis(cols);
+  }
+}
+function doAnalysis(cols) {
   const content = document.getElementById('resultContent');
   content.innerHTML = '';
-  const cols = [...selectedCols];
 
   // ===== 总结区域 =====
   const summaryHtml = renderSummary(cols);
@@ -680,10 +689,12 @@ function renderSummary(cols) {
       if (!labelMap[label]) labelMap[label] = { count: 0 };
       labelMap[label].count++;
     });
-    const negLabels = Object.entries(labelMap).filter(([l]) => isNegativeValue(l));
-    const posLabels = Object.entries(labelMap).filter(([l]) => !isNegativeValue(l));
+    const negLabels = Object.entries(labelMap).filter(([l]) => classifyValue(l) === 'negative');
+    const posLabels = Object.entries(labelMap).filter(([l]) => classifyValue(l) === 'positive');
+    const anomLabels = Object.entries(labelMap).filter(([l]) => classifyValue(l) === 'anomaly' || classifyValue(l) === 'unclassified');
     const negCount = negLabels.reduce((s, [, info]) => s + info.count, 0);
     const posCount = posLabels.reduce((s, [, info]) => s + info.count, 0);
+    const anomCount = anomLabels.reduce((s, [, info]) => s + info.count, 0);
 
     // 找关联的备注列：匹配列名中含有相同关键词 + "备注"/"问题"
     const colKey = col.replace(/是否/g, '');
@@ -731,10 +742,11 @@ function renderSummary(cols) {
     // 按频率排序，取 Top 原因
     const negReasonsSorted = Object.entries(reasonFreq).sort((a, b) => b[1] - a[1]);
 
-    return { col, posCount, negCount, negReasons: negReasonsSorted };
+    return { col, posCount, negCount, anomCount, negReasons: negReasonsSorted };
   });
 
-  // 第一列的正数据量作为后续列的分母
+  // 每列分母 = 有效数据（排除异常值），第二列+使用第一列有效正数据作分母
+  const firstDenom = colStats.length > 0 ? (colStats[0].posCount + colStats[0].negCount) : total;
   const firstPos = colStats.length > 0 ? colStats[0].posCount : total;
 
   let lines = [];
@@ -742,19 +754,32 @@ function renderSummary(cols) {
     const colShort = cs.col.replace(/是否.*/, '');
     const posLabel = cs.negCount > 0 ? getPositiveLabel(cs.col) : '';
     const negLabel = cs.negCount > 0 ? getNegativeLabel(cs.col) : '';
-    const denom = i === 0 ? total : firstPos;
-    const rate = (cs.posCount / denom * 100).toFixed(2);
+    // 第一列：分母=total-anomaly，后续列：分母=第一列正数据量（已排除异常）
+    const denom = i === 0 ? (total - cs.anomCount) : firstPos;
+    // 后续列的分子：只算同时在第一列也是正面的行
+    let effectivePos = cs.posCount;
+    if (i > 0 && colStats.length > 1) {
+      const firstCol = colStats[0].col;
+      effectivePos = rawData.filter(row => {
+        const v1 = row[firstCol], v2 = row[cs.col];
+        if (!v1 || !v2) return false;
+        return classifyValue(shortLabel(String(v1))) === 'positive' && classifyValue(shortLabel(String(v2))) === 'positive';
+      }).length;
+    }
+    const rate = denom > 0 ? (effectivePos / denom * 100).toFixed(2) : '0.00';
     const rateName = i === 0 ? `${colShort}有效率` : `${colShort}正确率`;
 
     let line = '';
     if (i === 0) {
       line = `总数据量 <strong>${total}</strong>`;
+      if (cs.anomCount > 0) line += `，<span style="color:#d97706;">异常数据 <strong>${cs.anomCount}</strong> 条（不计入分母）</span>`;
     }
     if (cs.negCount > 0) {
       if (i === 0) {
         line += `，${posLabel}数据 <strong>${cs.posCount}</strong> 条，<span style="color:#dc2626;">${negLabel}数据 <strong>${cs.negCount}</strong> 条</span>`;
       } else {
-        line = `${colShort}${posLabel} <strong>${cs.posCount}</strong> 条，<span style="color:#dc2626;">${negLabel} <strong>${cs.negCount}</strong> 条</span>`;
+        line = `${colShort}${posLabel} <strong>${effectivePos}</strong> 条，<span style="color:#dc2626;">${negLabel} <strong>${cs.negCount}</strong> 条</span>`;
+        if (cs.anomCount > 0) line += `，<span style="color:#d97706;">异常 <strong>${cs.anomCount}</strong> 条</span>`;
       }
       if (cs.negReasons.length) {
         const topReasons = cs.negReasons.slice(0, 5).map(([r, cnt]) => {
@@ -764,25 +789,39 @@ function renderSummary(cols) {
         line += `，主要原因：${topReasons.join('、')}`;
         if (cs.negReasons.length > 5) line += `等${cs.negReasons.length}类`;
       }
-      line += `。<strong style="color:#059669;">${rateName} ${rate}%</strong>（${cs.posCount}/${denom}）`;
+      line += `。<strong style="color:#059669;">${rateName} ${rate}%</strong>（${effectivePos}/${denom}）`;
     } else {
-      if (i > 0) line = `${colShort}全部${posLabel || '通过'}`;
-      line += `。<strong style="color:#059669;">${rateName} 100%</strong>（${cs.posCount}/${denom}）`;
+      if (i > 0) {
+        line = `${colShort}全部${posLabel || '通过'}`;
+        if (cs.anomCount > 0) line += `，<span style="color:#d97706;">异常 <strong>${cs.anomCount}</strong> 条</span>`;
+      }
+      line += `。<strong style="color:#059669;">${rateName} 100%</strong>（${effectivePos}/${denom}）`;
     }
     lines.push(line);
   });
 
-  // 整体有效率：所有列都为正面值的行数
+  // 整体有效率：所有列都为正面值的行数（排除异常值行）
   if (colStats.length > 1) {
     const allPosRows = rawData.filter(row => {
       return colStats.every(cs => {
         const v = row[cs.col];
         if (v === null || v === undefined || v === '') return false;
-        return !isNegativeValue(shortLabel(String(v)));
+        const cls = classifyValue(shortLabel(String(v)));
+        return cls === 'positive';
       });
     });
-    const overallRate = (allPosRows.length / total * 100).toFixed(2);
-    lines.push(`所有维度均通过的数据 <strong>${allPosRows.length}</strong> 条，<strong style="color:#059669;">整体有效率 ${overallRate}%</strong>（${allPosRows.length}/${total}）`);
+    // 分母排除任何列有异常值的行
+    const totalExclAnom = rawData.filter(row => {
+      return colStats.every(cs => {
+        const v = row[cs.col];
+        if (v === null || v === undefined || v === '') return false;
+        const cls = classifyValue(shortLabel(String(v)));
+        return cls !== 'anomaly' && cls !== 'unclassified';
+      });
+    }).length;
+    const denomAll = totalExclAnom > 0 ? totalExclAnom : total;
+    const overallRate = (allPosRows.length / denomAll * 100).toFixed(2);
+    lines.push(`所有维度均通过的数据 <strong>${allPosRows.length}</strong> 条，<strong style="color:#059669;">整体有效率 ${overallRate}%</strong>（${allPosRows.length}/${denomAll}）`);
   }
 
   let html = `<div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-radius:12px;padding:24px;margin-bottom:32px;border-left:4px solid #0284c7;">`;
@@ -888,6 +927,91 @@ function isNegativeValue(val) {
   return NEGATIVE_KEYWORDS.some(kw => label.includes(kw));
 }
 
+// 正面关键词
+const POSITIVE_KEYWORDS = ['合理','正确','完整','清晰','通过','达标','合格','有效','满足','正常',
+  '是','yes','true','pass','correct','valid','right','good','ok','complete','accurate'];
+function isPositiveValue(val) {
+  const label = shortLabel(val).toLowerCase();
+  return POSITIVE_KEYWORDS.some(kw => label.includes(kw));
+}
+
+// 用户手动归类存储: { label -> 'positive' | 'negative' | 'anomaly' }
+let userClassifications = {};
+function classifyValue(val) {
+  const label = shortLabel(val);
+  if (userClassifications[label]) return userClassifications[label];
+  if (isNegativeValue(label)) return 'negative';
+  if (isPositiveValue(label)) return 'positive';
+  return 'unclassified';
+}
+
+// 扫描所有列中未归类的标签
+function scanUnclassifiedLabels(cols) {
+  const unclassified = {};
+  cols.forEach(col => {
+    if (detectColType(col) !== 'text' || isCorrectionCol(col)) return;
+    rawData.forEach(row => {
+      const v = row[col];
+      if (v === null || v === undefined || v === '') return;
+      const label = shortLabel(String(v));
+      if (classifyValue(label) === 'unclassified') {
+        if (!unclassified[label]) unclassified[label] = { count: 0, cols: new Set(), examples: [] };
+        unclassified[label].count++;
+        unclassified[label].cols.add(col);
+        if (unclassified[label].examples.length < 2) unclassified[label].examples.push(String(v));
+      }
+    });
+  });
+  return unclassified;
+}
+
+// 弹窗让用户归类未识别标签
+function showClassificationModal(unclassified, callback) {
+  const labels = Object.entries(unclassified);
+  if (!labels.length) { callback(); return; }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease;';
+  let rows = '';
+  labels.forEach(([label, info], i) => {
+    rows += `<tr style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:10px 12px;"><strong style="color:#1f2937;">${escapeHtml(label)}</strong>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">列：${[...info.cols].map(c => escapeHtml(c)).join('、')}</div></td>
+      <td style="padding:10px 6px;text-align:center;color:#6b7280;">${info.count}</td>
+      <td style="padding:10px 12px;text-align:center;white-space:nowrap;">
+        <label style="margin-right:10px;cursor:pointer;"><input type="radio" name="cls_${i}" value="positive" style="margin-right:3px;accent-color:#059669;">正确</label>
+        <label style="margin-right:10px;cursor:pointer;"><input type="radio" name="cls_${i}" value="negative" style="margin-right:3px;accent-color:#dc2626;">错误</label>
+        <label style="cursor:pointer;"><input type="radio" name="cls_${i}" value="anomaly" checked style="margin-right:3px;accent-color:#d97706;">异常</label>
+      </td></tr>`;
+  });
+  overlay.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px;max-width:600px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <h3 style="font-size:18px;color:#7c3aed;margin-bottom:6px;">⚠️ 检测到未归类的标签值</h3>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">以下标签无法自动判定为"正确"或"错误"，请手动归类。<br>标记为<strong style="color:#d97706;">「异常」</strong>的数据将<strong>不计入分母</strong>。</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:#f5f3ff;">
+        <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">标签值</th>
+        <th style="padding:10px 6px;text-align:center;border-bottom:2px solid #e5e7eb;">数量</th>
+        <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">归类</th>
+      </tr></thead><tbody>${rows}</tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+      <button id="clsSkipBtn" style="padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;font-size:13px;cursor:pointer;transition:background .15s;">全部算异常</button>
+      <button id="clsConfirmBtn" style="padding:8px 24px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;">确认归类</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) return; }); // prevent bg close
+  overlay.querySelector('#clsSkipBtn').addEventListener('click', () => {
+    labels.forEach(([label]) => { userClassifications[label] = 'anomaly'; });
+    overlay.remove(); callback();
+  });
+  overlay.querySelector('#clsConfirmBtn').addEventListener('click', () => {
+    labels.forEach(([label], i) => {
+      const sel = overlay.querySelector(`input[name="cls_${i}"]:checked`);
+      if (sel) userClassifications[label] = sel.value;
+    });
+    overlay.remove(); callback();
+  });
+}
+
 // 判断是否为"修正/补充"类列
 const CORRECTION_KEYWORDS = ['补充短答案', 'response修正', 'Response修正', 'Query修正', 'query修正'];
 function isCorrectionCol(col) {
@@ -911,29 +1035,41 @@ function renderTextAnalysis(col, stats) {
   const colors = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#7c2d12','#4338ca','#0891b2','#be123c','#65a30d'];
 
   html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">';
-  // 计算有效率（提前算，和卡片放一行）
-  const negCount = sorted.filter(([label]) => isNegativeValue(label)).reduce((s, [, info]) => s + info.count, 0);
-  const posCount = stats.count - negCount;
+  // 计算有效率（提前算，排除异常值）
+  const negCount = sorted.filter(([label]) => classifyValue(label) === 'negative').reduce((s, [, info]) => s + info.count, 0);
+  const anomCount = sorted.filter(([label]) => { const c = classifyValue(label); return c === 'anomaly' || c === 'unclassified'; }).reduce((s, [, info]) => s + info.count, 0);
+  const posCount = stats.count - negCount - anomCount;
+  const effectiveDenom = stats.count - anomCount;  // 分母排除异常值
   const hasRate = negCount > 0 && posCount > 0;
 
   // 有效率卡片放最前面
   if (hasRate) {
-    const rate = (posCount / stats.count * 100).toFixed(1);
+    const rate = effectiveDenom > 0 ? (posCount / effectiveDenom * 100).toFixed(1) : '0.0';
     const colShort = col.replace(/是否.*/, '');
     html += `<div class="stat-box" style="border-left: 4px solid #059669; background: linear-gradient(135deg, #ecfdf5, #d1fae5);flex:1;min-width:140px;">
       <div class="label">${escapeHtml(colShort)}有效率</div>
       <div class="value" style="color:#059669;">${rate}%</div>
-      <div style="font-size:13px;color:#6b7280;margin-top:4px;">${posCount} / ${stats.count}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">${posCount} / ${effectiveDenom}</div>
+    </div>`;
+  }
+  // 异常值卡片
+  if (anomCount > 0) {
+    html += `<div class="stat-box" style="border-left: 4px solid #d97706; background: linear-gradient(135deg, #fffbeb, #fef3c7);flex:1;min-width:140px;">
+      <div class="label">异常（不计入分母）</div>
+      <div class="value" style="color:#d97706;">${anomCount}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">${(anomCount / stats.count * 100).toFixed(1)}%</div>
     </div>`;
   }
 
   sorted.forEach(([label, info], i) => {
     const pct = (info.count / stats.count * 100).toFixed(1);
-    const isNeg = isNegativeValue(label);
-    const color = isNeg ? '#dc2626' : colors[i % colors.length];
+    const cls = classifyValue(label);
+    const isNeg = cls === 'negative';
+    const isAnom = cls === 'anomaly' || cls === 'unclassified';
+    const color = isAnom ? '#d97706' : (isNeg ? '#dc2626' : colors[i % colors.length]);
     html += `<div class="stat-box" style="border-left: 4px solid ${color};flex:1;min-width:140px;">
-      <div class="label">${escapeHtml(label)}</div>
-      <div class="value" ${isNeg ? 'style="color:#dc2626;"' : ''}>${info.count}</div>
+      <div class="label">${escapeHtml(label)}${isAnom ? ' ⚠️' : ''}</div>
+      <div class="value" ${isNeg ? 'style="color:#dc2626;"' : (isAnom ? 'style="color:#d97706;"' : '')}>${info.count}</div>
       <div style="font-size:13px;color:#6b7280;margin-top:4px;">${pct}%</div>
     </div>`;
   });
