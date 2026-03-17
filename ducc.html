@@ -10,7 +10,7 @@
   body{min-height:100vh;background:linear-gradient(135deg,#e0e7ff 0%,#fce7f3 50%,#e0e7ff 100%);font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden}
 
   /* 鸭子 */
-  .duck{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;transition:transform .2s;animation:bob 2.5s ease-in-out infinite;display:flex;align-items:center;justify-content:center;font-size:44px;line-height:1;-webkit-user-select:none;user-select:none;background:rgba(255,255,255,.92);border-radius:50%;box-shadow:0 6px 24px rgba(0,0,0,.2),0 2px 8px rgba(139,92,246,.15)}
+  .duck{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;filter:drop-shadow(0 4px 14px rgba(0,0,0,.2));transition:transform .2s;animation:bob 2.5s ease-in-out infinite}
   .duck:hover{animation:none;transform:scale(1.1)}
   .duck:active{transform:scale(.92)}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
@@ -84,6 +84,10 @@
   .bg-text p{font-size:16px;color:#6b7280}
   .bg-text .sub{font-size:12px;color:#9ca3af;margin-top:6px}
 
+  .duck-emoji{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;transition:transform .2s;animation:bob 2.5s ease-in-out infinite;display:none;align-items:center;justify-content:center;font-size:44px;line-height:1;-webkit-user-select:none;user-select:none;background:rgba(255,255,255,.92);border-radius:50%;box-shadow:0 6px 24px rgba(0,0,0,.2),0 2px 8px rgba(139,92,246,.15)}
+  .duck-emoji:hover{animation:none;transform:scale(1.1)}
+  .duck-emoji:active{transform:scale(.92)}
+
   /* 形象选择 */
   .mascot-wrap{display:none;padding:12px 14px;background:#faf5ff;border-top:1px solid #e9d5ff;flex-shrink:0}
   .mascot-wrap.show{display:block}
@@ -145,7 +149,22 @@
   <div class="ft">点击打开链接 · 数据保存在浏览器本地<br>Made with <a href="https://expert-coder666.github.io/Create-repository/" target="_blank">Ducc</a></div>
 </div>
 
-<div class="duck" id="D" onclick="toggle()">🐣</div>
+<svg class="duck" id="D" onclick="toggle()" viewBox="0 0 100 100" fill="none">
+  <ellipse cx="50" cy="70" rx="30" ry="22" fill="#fbbf24"/>
+  <circle cx="50" cy="38" r="22" fill="#fbbf24"/>
+  <circle cx="42" cy="33" r="3" fill="#1e1b4b"/>
+  <circle cx="58" cy="33" r="3" fill="#1e1b4b"/>
+  <circle cx="43.2" cy="31.8" r="1.1" fill="#fff"/>
+  <circle cx="59.2" cy="31.8" r="1.1" fill="#fff"/>
+  <ellipse cx="50" cy="42" rx="7" ry="4" fill="#f97316"/>
+  <circle cx="36" cy="39" r="4" fill="#fde68a" opacity=".5"/>
+  <circle cx="64" cy="39" r="4" fill="#fde68a" opacity=".5"/>
+  <ellipse cx="24" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(-15 24 65)" opacity=".7"/>
+  <ellipse cx="76" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(15 76 65)" opacity=".7"/>
+  <ellipse cx="40" cy="90" rx="8" ry="3" fill="#f97316"/>
+  <ellipse cx="60" cy="90" rx="8" ry="3" fill="#f97316"/>
+</svg>
+<div class="duck-emoji" id="DE" onclick="toggle()"></div>
 
 <div class="toast" id="T"></div>
 
@@ -169,7 +188,7 @@ var MASCOTS=[
 var curMascot="🐣";
 var P=document.getElementById('P'),O=document.getElementById('O'),L=document.getElementById('L'),F=document.getElementById('F'),T=document.getElementById('T'),MW=document.getElementById('MW');
 
-function load(){try{var d=localStorage.getItem('ducc_skills');if(d){skills=JSON.parse(d)}else{skills=DEFAULTS.slice();save()}}catch(e){skills=DEFAULTS.slice();save()}var m=localStorage.getItem('ducc_mascot');if(m){curMascot=m}document.getElementById('D').textContent=curMascot;document.getElementById('bgIcon').textContent=curMascot}
+function load(){try{var d=localStorage.getItem('ducc_skills');if(d){skills=JSON.parse(d)}else{skills=DEFAULTS.slice();save()}}catch(e){skills=DEFAULTS.slice();save()}var m=localStorage.getItem('ducc_mascot');if(m){curMascot=m}applyMascot()}
 function save(){localStorage.setItem('ducc_skills',JSON.stringify(skills))}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
@@ -243,7 +262,8 @@ function toast(msg){T.textContent=msg;T.classList.add('show');setTimeout(functio
 
 function toggleMascot(){var s=MW.classList.toggle('show');document.getElementById('mascotBtn').style.background=s?'rgba(255,255,255,.5)':'';if(s){hideForm();renderMascotGrid()}}
 function renderMascotGrid(){document.getElementById('mascotGrid').innerHTML=MASCOTS.map(function(m){return '<div class="mascot-opt'+(m.emoji===curMascot?' sel':'')+'" onclick="pickMascot(\''+m.emoji+'\')">'+m.emoji+'</div>';}).join('')}
-function pickMascot(e){curMascot=e;localStorage.setItem('ducc_mascot',e);document.getElementById('D').textContent=e;document.getElementById('bgIcon').textContent=e;renderMascotGrid();toast('已切换为 '+MASCOTS.find(function(m){return m.emoji===e}).name)}
+function pickMascot(e){curMascot=e;localStorage.setItem('ducc_mascot',e);applyMascot();renderMascotGrid();toast('已切换为 '+MASCOTS.find(function(m){return m.emoji===e}).name)}
+function applyMascot(){var svg=document.getElementById('D'),emo=document.getElementById('DE'),bg=document.getElementById('bgIcon');if(curMascot==='🐣'){svg.style.display='';emo.style.display='none'}else{svg.style.display='none';emo.style.display='flex';emo.textContent=curMascot}bg.textContent=curMascot}
 
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&panelOpen)toggle()});
 
