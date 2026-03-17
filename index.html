@@ -945,27 +945,27 @@ function classifyValue(val) {
   return 'unclassified';
 }
 
-// 扫描所有列中未归类的标签
+// 扫描所有列中非正面的标签值（负面+未归类都需要用户确认）
 function scanUnclassifiedLabels(cols) {
-  const unclassified = {};
+  const needClassify = {};
   cols.forEach(col => {
     if (detectColType(col) !== 'text' || isCorrectionCol(col)) return;
     rawData.forEach(row => {
       const v = row[col];
       if (v === null || v === undefined || v === '') return;
       const label = shortLabel(String(v));
-      if (classifyValue(label) === 'unclassified') {
-        if (!unclassified[label]) unclassified[label] = { count: 0, cols: new Set(), examples: [] };
-        unclassified[label].count++;
-        unclassified[label].cols.add(col);
-        if (unclassified[label].examples.length < 2) unclassified[label].examples.push(String(v));
-      }
+      // 跳过已有用户归类的，跳过纯正面的
+      if (userClassifications[label]) return;
+      if (isPositiveValue(label)) return;
+      if (!needClassify[label]) needClassify[label] = { count: 0, cols: new Set(), autoNeg: isNegativeValue(label) };
+      needClassify[label].count++;
+      needClassify[label].cols.add(col);
     });
   });
-  return unclassified;
+  return needClassify;
 }
 
-// 弹窗让用户归类未识别标签
+// 弹窗让用户归类非正面标签
 function showClassificationModal(unclassified, callback) {
   const labels = Object.entries(unclassified);
   if (!labels.length) { callback(); return; }
@@ -973,19 +973,20 @@ function showClassificationModal(unclassified, callback) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease;';
   let rows = '';
   labels.forEach(([label, info], i) => {
+    const defNeg = info.autoNeg;  // 自动判定为负面的预选"错误"
     rows += `<tr style="border-bottom:1px solid #f3f4f6;">
       <td style="padding:10px 12px;"><strong style="color:#1f2937;">${escapeHtml(label)}</strong>
         <div style="font-size:11px;color:#9ca3af;margin-top:2px;">列：${[...info.cols].map(c => escapeHtml(c)).join('、')}</div></td>
       <td style="padding:10px 6px;text-align:center;color:#6b7280;">${info.count}</td>
       <td style="padding:10px 12px;text-align:center;white-space:nowrap;">
         <label style="margin-right:10px;cursor:pointer;"><input type="radio" name="cls_${i}" value="positive" style="margin-right:3px;accent-color:#059669;">正确</label>
-        <label style="margin-right:10px;cursor:pointer;"><input type="radio" name="cls_${i}" value="negative" style="margin-right:3px;accent-color:#dc2626;">错误</label>
-        <label style="cursor:pointer;"><input type="radio" name="cls_${i}" value="anomaly" checked style="margin-right:3px;accent-color:#d97706;">异常</label>
+        <label style="margin-right:10px;cursor:pointer;"><input type="radio" name="cls_${i}" value="negative" ${defNeg ? 'checked' : ''} style="margin-right:3px;accent-color:#dc2626;">错误</label>
+        <label style="cursor:pointer;"><input type="radio" name="cls_${i}" value="anomaly" ${!defNeg ? 'checked' : ''} style="margin-right:3px;accent-color:#d97706;">异常</label>
       </td></tr>`;
   });
   overlay.innerHTML = `<div style="background:#fff;border-radius:16px;padding:28px;max-width:600px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-    <h3 style="font-size:18px;color:#7c3aed;margin-bottom:6px;">⚠️ 检测到未归类的标签值</h3>
-    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">以下标签无法自动判定为"正确"或"错误"，请手动归类。<br>标记为<strong style="color:#d97706;">「异常」</strong>的数据将<strong>不计入分母</strong>。</p>
+    <h3 style="font-size:18px;color:#7c3aed;margin-bottom:6px;">⚠️ 检测到需要归类的标签值</h3>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">以下标签需要确认归类方式。<br>标记为<strong style="color:#d97706;">「异常」</strong>的数据将<strong>不计入分母</strong>。</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#f5f3ff;">
         <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">标签值</th>
