@@ -501,19 +501,30 @@ function resetAll() {
 // ==================== 列选择器 ====================
 function renderColSelector() {
   const wrap = document.getElementById('colSelector');
-  wrap.innerHTML = '';
-  columns.forEach(col => {
+  let html = '';
+  columns.forEach((col, idx) => {
     // 跳过全空列和 __EMPTY 系列列
     if (/^__EMPTY/.test(col)) return;
     if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
-    const chip = document.createElement('div');
-    chip.className = 'col-chip' + (selectedCols.has(col) ? ' active' : '');
+    const active = selectedCols.has(col) ? ' active' : '';
     const dtype = detectColType(col);
-    chip.innerHTML = `${col} <span class="type-badge">${dtype === 'num' ? '数值' : '文本'}</span>`;
-    chip.onclick = () => toggleCol(col);
-    wrap.appendChild(chip);
+    html += `<div class="col-chip${active}" data-obj-idx="${idx}">${escapeHtml(col)} <span class="type-badge">${dtype === 'num' ? '数值' : '文本'}</span></div>`;
   });
+  wrap.innerHTML = html;
 }
+// 事件委托：客观分析列选择
+(function(){
+  const wrap = document.getElementById('colSelector');
+  if (!wrap) return;
+  wrap.addEventListener('click', function(e) {
+    const chip = e.target.closest('.col-chip[data-obj-idx]');
+    if (!chip) return;
+    const idx = parseInt(chip.getAttribute('data-obj-idx'), 10);
+    const col = columns[idx];
+    if (col === undefined) return;
+    toggleCol(col);
+  });
+})();
 
 // 管理 Tab 列选择器
 function renderManageColSelector() {
@@ -1338,20 +1349,29 @@ function switchTab(tabId) {
 function renderSubjColSelector() {
   const wrap = document.getElementById('subjColSelector');
   if (!wrap) return;
-  wrap.innerHTML = '';
-  columns.forEach(col => {
+  let html = '';
+  columns.forEach((col, idx) => {
     // 跳过 __EMPTY 系列列
     if (/^__EMPTY/.test(col)) return;
-    const chip = document.createElement('div');
-    chip.className = 'col-chip' + (subjSelectedCols.has(col) ? ' active' : '');
-    chip.innerHTML = `${escapeHtml(col)}`;
-    chip.onclick = () => {
-      if (subjSelectedCols.has(col)) subjSelectedCols.delete(col); else subjSelectedCols.add(col);
-      renderSubjColSelector();
-    };
-    wrap.appendChild(chip);
+    const active = subjSelectedCols.has(col) ? ' active' : '';
+    html += `<div class="col-chip${active}" data-subj-idx="${idx}">${escapeHtml(col)}</div>`;
   });
+  wrap.innerHTML = html;
 }
+// 事件委托：点击列选择器中的 chip
+(function(){
+  const wrap = document.getElementById('subjColSelector');
+  if (!wrap) return;
+  wrap.addEventListener('click', function(e) {
+    const chip = e.target.closest('.col-chip[data-subj-idx]');
+    if (!chip) return;
+    const idx = parseInt(chip.getAttribute('data-subj-idx'), 10);
+    const col = columns[idx];
+    if (col === undefined) return;
+    if (subjSelectedCols.has(col)) subjSelectedCols.delete(col); else subjSelectedCols.add(col);
+    renderSubjColSelector();
+  });
+})();
 function subjSelectAll() { columns.forEach(c => subjSelectedCols.add(c)); renderSubjColSelector(); }
 function subjDeselectAll() { subjSelectedCols.clear(); renderSubjColSelector(); }
 
