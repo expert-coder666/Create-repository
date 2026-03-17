@@ -10,7 +10,7 @@
   body{min-height:100vh;background:linear-gradient(135deg,#e0e7ff 0%,#fce7f3 50%,#e0e7ff 100%);font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden}
 
   /* 鸭子 */
-  .duck{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;filter:drop-shadow(0 4px 14px rgba(0,0,0,.2));transition:transform .2s;animation:bob 2.5s ease-in-out infinite}
+  .duck{position:fixed;bottom:28px;right:28px;width:76px;height:76px;cursor:pointer;z-index:9999;filter:drop-shadow(0 4px 14px rgba(0,0,0,.2));transition:transform .2s;animation:bob 2.5s ease-in-out infinite;display:flex;align-items:center;justify-content:center;font-size:56px;line-height:1;-webkit-user-select:none;user-select:none}
   .duck:hover{animation:none;transform:scale(1.1)}
   .duck:active{transform:scale(.92)}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
@@ -84,6 +84,16 @@
   .bg-text p{font-size:16px;color:#6b7280}
   .bg-text .sub{font-size:12px;color:#9ca3af;margin-top:6px}
 
+  /* 形象选择 */
+  .mascot-wrap{display:none;padding:12px 14px;background:#faf5ff;border-top:1px solid #e9d5ff;flex-shrink:0}
+  .mascot-wrap.show{display:block}
+  .mascot-title{font-size:13px;font-weight:700;color:#6d28d9;margin-bottom:10px}
+  .mascot-grid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+  .mascot-opt{width:48px;height:48px;border-radius:12px;border:2px solid transparent;display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;transition:all .15s;background:#f5f3ff}
+  .mascot-opt:hover{background:#ede9fe;transform:scale(1.1)}
+  .mascot-opt.sel{border-color:#8b5cf6;background:#ede9fe;transform:scale(1.08)}
+  .mascot-opt .mascot-label{display:none;font-size:9px;color:#6b7280}
+
   @media(max-width:640px){
     .panel{right:8px;left:8px;width:auto;bottom:100px}
     .duck{right:16px;bottom:16px;width:64px;height:64px}
@@ -93,7 +103,7 @@
 <body>
 
 <div class="bg-text">
-  <h1>🐣</h1>
+  <h1 id="bgIcon">🐣</h1>
   <p>点击右下角的小鸭子</p>
   <div class="sub">Ducc 工具台 · 你的专属快捷入口</div>
 </div>
@@ -105,9 +115,15 @@
     <svg viewBox="0 0 100 100" fill="none"><ellipse cx="50" cy="72" rx="32" ry="22" fill="#fbbf24"/><circle cx="50" cy="40" r="24" fill="#fbbf24"/><circle cx="41" cy="35" r="3.5" fill="#1e1b4b"/><circle cx="59" cy="35" r="3.5" fill="#1e1b4b"/><circle cx="42" cy="33.5" r="1.2" fill="#fff"/><circle cx="60" cy="33.5" r="1.2" fill="#fff"/><ellipse cx="50" cy="43" rx="6" ry="3.5" fill="#f97316"/><circle cx="38" cy="40" r="4" fill="#fde68a" opacity=".4"/></svg>
     <div class="hdr-text"><h2>Ducc 工具台</h2><p>你的专属开发小助手</p></div>
     <div class="hdr-btns">
+      <button class="hdr-btn" onclick="toggleMascot()" title="换形象" id="mascotBtn">🎨</button>
       <button class="hdr-btn" onclick="toggleEdit()" title="编辑" id="editBtn">✏️</button>
       <button class="hdr-btn" onclick="showForm()" title="添加">＋</button>
     </div>
+  </div>
+
+  <div class="mascot-wrap" id="MW">
+    <div class="mascot-title">选择你的形象</div>
+    <div class="mascot-grid" id="mascotGrid"></div>
   </div>
 
   <div class="form" id="F">
@@ -129,21 +145,7 @@
   <div class="ft">点击打开链接 · 数据保存在浏览器本地<br>Made with <a href="https://expert-coder666.github.io/Create-repository/" target="_blank">Ducc</a></div>
 </div>
 
-<svg class="duck" id="D" onclick="toggle()" viewBox="0 0 100 100" fill="none">
-  <ellipse cx="50" cy="70" rx="30" ry="22" fill="#fbbf24"/>
-  <circle cx="50" cy="38" r="22" fill="#fbbf24"/>
-  <circle cx="42" cy="33" r="3" fill="#1e1b4b"/>
-  <circle cx="58" cy="33" r="3" fill="#1e1b4b"/>
-  <circle cx="43.2" cy="31.8" r="1.1" fill="#fff"/>
-  <circle cx="59.2" cy="31.8" r="1.1" fill="#fff"/>
-  <ellipse cx="50" cy="42" rx="7" ry="4" fill="#f97316"/>
-  <circle cx="36" cy="39" r="4" fill="#fde68a" opacity=".5"/>
-  <circle cx="64" cy="39" r="4" fill="#fde68a" opacity=".5"/>
-  <ellipse cx="24" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(-15 24 65)" opacity=".7"/>
-  <ellipse cx="76" cy="65" rx="8" ry="14" fill="#f59e0b" transform="rotate(15 76 65)" opacity=".7"/>
-  <ellipse cx="40" cy="90" rx="8" ry="3" fill="#f97316"/>
-  <ellipse cx="60" cy="90" rx="8" ry="3" fill="#f97316"/>
-</svg>
+<div class="duck" id="D" onclick="toggle()">🐣</div>
 
 <div class="toast" id="T"></div>
 
@@ -158,9 +160,16 @@ var EMOJIS=["📰","🧩","📊","🧠","✨","🔧","📁","🎯","🚀","💡"
 var COLORS=["#f59e0b","#8b5cf6","#0ea5e9","#f43f5e","#10b981","#6366f1","#ec4899","#14b8a6","#f97316","#64748b"];
 
 var skills=[],editing=false,selEmoji="🔧",selColor="#8b5cf6";
-var P=document.getElementById('P'),O=document.getElementById('O'),L=document.getElementById('L'),F=document.getElementById('F'),T=document.getElementById('T');
+var MASCOTS=[
+  {emoji:"🐣",name:"小鸭子"},{emoji:"🐱",name:"小猫咪"},{emoji:"🐰",name:"小兔子"},
+  {emoji:"🐼",name:"小熊猫"},{emoji:"🦊",name:"小狐狸"},{emoji:"🐶",name:"小狗狗"},
+  {emoji:"🦉",name:"猫头鹰"},{emoji:"🐧",name:"小企鹅"},{emoji:"🐻",name:"小棕熊"},
+  {emoji:"🐯",name:"小老虎"},{emoji:"🦄",name:"独角兽"},{emoji:"🐸",name:"小青蛙"}
+];
+var curMascot="🐣";
+var P=document.getElementById('P'),O=document.getElementById('O'),L=document.getElementById('L'),F=document.getElementById('F'),T=document.getElementById('T'),MW=document.getElementById('MW');
 
-function load(){try{var d=localStorage.getItem('ducc_skills');if(d){skills=JSON.parse(d);return}}catch(e){}skills=DEFAULTS.slice();save()}
+function load(){try{var d=localStorage.getItem('ducc_skills');if(d){skills=JSON.parse(d)}else{skills=DEFAULTS.slice();save()}}catch(e){skills=DEFAULTS.slice();save()}var m=localStorage.getItem('ducc_mascot');if(m){curMascot=m}document.getElementById('D').textContent=curMascot;document.getElementById('bgIcon').textContent=curMascot}
 function save(){localStorage.setItem('ducc_skills',JSON.stringify(skills))}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
@@ -179,7 +188,7 @@ function render(){
 }
 
 var panelOpen=false;
-function toggle(){panelOpen=!panelOpen;P.classList.toggle('open',panelOpen);O.classList.toggle('open',panelOpen);if(!panelOpen){editing=false;hideForm();render()}}
+function toggle(){panelOpen=!panelOpen;P.classList.toggle('open',panelOpen);O.classList.toggle('open',panelOpen);if(!panelOpen){editing=false;hideForm();MW.classList.remove('show');document.getElementById('mascotBtn').style.background='';render()}}
 O.addEventListener('click',function(){if(panelOpen)toggle()});
 
 function go(i){
@@ -197,6 +206,7 @@ function toggleEdit(){
 }
 
 function showForm(){
+  MW.classList.remove('show');document.getElementById('mascotBtn').style.background='';
   F.classList.add('show');
   document.getElementById('f_name').value='';
   document.getElementById('f_url').value='';
@@ -230,6 +240,10 @@ function saveItem(){
 }
 
 function toast(msg){T.textContent=msg;T.classList.add('show');setTimeout(function(){T.classList.remove('show')},1300)}
+
+function toggleMascot(){var s=MW.classList.toggle('show');document.getElementById('mascotBtn').style.background=s?'rgba(255,255,255,.5)':'';if(s){hideForm();renderMascotGrid()}}
+function renderMascotGrid(){document.getElementById('mascotGrid').innerHTML=MASCOTS.map(function(m){return '<div class="mascot-opt'+(m.emoji===curMascot?' sel':'')+'" onclick="pickMascot(\''+m.emoji+'\')">'+m.emoji+'</div>';}).join('')}
+function pickMascot(e){curMascot=e;localStorage.setItem('ducc_mascot',e);document.getElementById('D').textContent=e;document.getElementById('bgIcon').textContent=e;renderMascotGrid();toast('已切换为 '+MASCOTS.find(function(m){return m.emoji===e}).name)}
 
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&panelOpen)toggle()});
 
