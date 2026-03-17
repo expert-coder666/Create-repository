@@ -1340,9 +1340,8 @@ function renderSubjColSelector() {
   if (!wrap) return;
   wrap.innerHTML = '';
   columns.forEach(col => {
-    // 跳过全空列和 __EMPTY 系列列
+    // 跳过 __EMPTY 系列列
     if (/^__EMPTY/.test(col)) return;
-    if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
     const chip = document.createElement('div');
     chip.className = 'col-chip' + (subjSelectedCols.has(col) ? ' active' : '');
     chip.innerHTML = `${escapeHtml(col)}`;
