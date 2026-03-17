@@ -844,7 +844,7 @@ function getNegativeLabel(col) {
   if (col.includes('正确')) return '错误';
   if (col.includes('完整')) return '不完整';
   if (col.includes('通过')) return '不通过';
-  return '异常';
+  return '错误';
 }
 
 // ==================== 渲染：数值列分析 ====================
@@ -940,12 +940,24 @@ let userClassifications = {};
 function classifyValue(val) {
   const label = shortLabel(val);
   if (userClassifications[label]) return userClassifications[label];
+  // 标准标签直接分类
+  if (STANDARD_NEG_LABELS && isStandardLabel(label)) {
+    return isNegativeValue(label) ? 'negative' : 'positive';
+  }
   if (isNegativeValue(label)) return 'negative';
   if (isPositiveValue(label)) return 'positive';
   return 'unclassified';
 }
 
-// 扫描所有列中非正面的标签值（负面+未归类都需要用户确认）
+// 标准正面/负面标签：精确匹配这些的不弹窗
+const STANDARD_POS_LABELS = ['合理','正确','完整','清晰','通过','达标','合格','有效','满足','正常','是','yes','true','pass','correct','valid','right','good','ok','complete','accurate'];
+const STANDARD_NEG_LABELS = ['不合理','不正确','不完整','不清晰','不满足','不通过','不达标','不合格','错误','失败','异常','缺失','无效','拒绝','差','否','no','false','fail','error','invalid','incorrect','wrong'];
+function isStandardLabel(label) {
+  const l = label.toLowerCase();
+  return STANDARD_POS_LABELS.includes(l) || STANDARD_NEG_LABELS.includes(l);
+}
+
+// 扫描需要用户归类的模糊标签（标准标签自动分类，不弹窗）
 function scanUnclassifiedLabels(cols) {
   const needClassify = {};
   cols.forEach(col => {
@@ -954,9 +966,8 @@ function scanUnclassifiedLabels(cols) {
       const v = row[col];
       if (v === null || v === undefined || v === '') return;
       const label = shortLabel(String(v));
-      // 跳过已有用户归类的，跳过纯正面的
-      if (userClassifications[label]) return;
-      if (isPositiveValue(label)) return;
+      if (userClassifications[label]) return;  // 已有用户归类
+      if (isStandardLabel(label)) return;       // 标准标签自动处理
       if (!needClassify[label]) needClassify[label] = { count: 0, cols: new Set(), autoNeg: isNegativeValue(label) };
       needClassify[label].count++;
       needClassify[label].cols.add(col);
