@@ -437,10 +437,12 @@ function exportJSON() {
 }
 
 function exportXLSX() {
-  const ws = XLSX.utils.json_to_sheet(rawData, { header: columns });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, originalFileName + '.xlsx');
+  try {
+    const ws = XLSX.utils.json_to_sheet(rawData, { header: columns });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, originalFileName + '.xlsx');
+  } catch (e) { alert('Excel 导出失败: ' + e.message); }
 }
 
 function downloadBlob(text, filename, mime) {
@@ -448,8 +450,10 @@ function downloadBlob(text, filename, mime) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 200);
 }
 
 // ==================== 重置 ====================
