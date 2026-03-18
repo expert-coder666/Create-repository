@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据格式转换工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh; padding: 20px;
+  color: #333;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+h1 {
+  text-align: center; color: #fff; font-size: 2em; margin-bottom: 6px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.subtitle {
+  text-align: center; color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 24px;
+}
+.card {
+  background: #fff; border-radius: 16px; padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12); margin-bottom: 20px;
+}
+.card h2 { font-size: 1.2em; color: #5a4fcf; margin-bottom: 16px; }
+
+/* 上传区 */
+.upload-area {
+  border: 3px dashed #c4b5fd; border-radius: 12px; padding: 48px;
+  text-align: center; cursor: pointer; transition: all 0.3s;
+  background: #faf5ff;
+}
+.upload-area:hover, .upload-area.dragover {
+  border-color: #7c3aed; background: #ede9fe;
+}
+.upload-area .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-area .main-text { font-size: 16px; color: #5b21b6; font-weight: 600; }
+.upload-area .sub-text { font-size: 13px; color: #9ca3af; margin-top: 8px; }
+
+/* 按钮 */
+.btn {
+  padding: 8px 20px; border: none; border-radius: 8px;
+  font-size: 14px; cursor: pointer; transition: all 0.2s; font-weight: 500;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: #7c3aed; color: #fff; }
+.btn-primary:hover { background: #6d28d9; }
+.btn-outline {
+  background: transparent; color: #7c3aed; border: 2px solid #7c3aed;
+}
+.btn-outline:hover { background: #f5f3ff; }
+.btn-success { background: #059669; color: #fff; }
+.btn-success:hover { background: #047857; }
+
+/* 信息栏 */
+.info-bar {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 12px 16px;
+  background: #f5f3ff; border-radius: 10px;
+}
+.info-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;
+}
+.info-tag.format { background: #ede9fe; color: #7c3aed; }
+.info-tag.size { background: #e0f2fe; color: #0369a1; }
+.info-tag.rows { background: #dcfce7; color: #166534; }
+
+/* 格式选择 */
+.format-group {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.format-btn {
+  padding: 10px 24px; border: 2px solid #e5e7eb; border-radius: 10px;
+  background: #fff; cursor: pointer; transition: all 0.2s;
+  font-size: 14px; font-weight: 600; color: #6b7280;
+  display: flex; align-items: center; gap: 6px;
+}
+.format-btn:hover { border-color: #7c3aed; color: #7c3aed; background: #faf5ff; }
+.format-btn.active { border-color: #7c3aed; background: #7c3aed; color: #fff; }
+.format-btn .ext { font-size: 11px; opacity: 0.7; }
+
+/* 表格 */
+.table-wrap {
+  overflow-x: auto; max-height: 400px; overflow-y: auto;
+  border: 1px solid #e5e7eb; border-radius: 8px;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+thead th {
+  background: #7c3aed; color: #fff; padding: 10px 14px;
+  position: sticky; top: 0; z-index: 1; text-align: left;
+}
+tbody td { padding: 8px 14px; border-bottom: 1px solid #f3f4f6; }
+tbody tr:hover { background: #faf5ff; }
+tbody tr:nth-child(even) { background: #f9fafb; }
+tbody tr:nth-child(even):hover { background: #faf5ff; }
+
+/* 工具栏 */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar .spacer { flex: 1; }
+
+.hidden { display: none !important; }
+
+/* 响应式 */
+@media (max-width: 640px) {
+  body { padding: 12px; }
+  .card { padding: 16px; }
+  .upload-area { padding: 32px 16px; }
+  .format-btn { padding: 8px 16px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔄 数据格式转换工具</h1>
+  <p class="subtitle">支持 JSONL / JSON / CSV / TSV / Excel 互转 · 自动识别输入格式 · 浏览器本地处理</p>
+
+  <!-- 上传区 -->
+  <div class="card" id="uploadCard">
+    <div class="upload-area" id="uploadArea">
+      <div class="icon">📂</div>
+      <div class="main-text">拖拽文件到此处，或点击选择文件</div>
+      <div class="sub-text">支持 .jsonl .json .csv .tsv .txt .xlsx .xls</div>
+    </div>
+    <input type="file" id="fileInput" accept=".jsonl,.json,.csv,.tsv,.txt,.xlsx,.xls" style="display:none">
+  </div>
+
+  <!-- 数据预览 + 转换 -->
+  <div class="card hidden" id="dataCard">
+    <h2>📋 数据预览</h2>
+    <div class="info-bar" id="infoBar"></div>
+    <div class="toolbar">
+      <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
+      <div class="spacer"></div>
+    </div>
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+
+  <div class="card hidden" id="exportCard">
+    <h2>📤 选择输出格式</h2>
+    <div class="format-group" id="formatGroup">
+      <div class="format-btn" data-fmt="csv" onclick="pickFormat('csv')">📄 CSV <span class="ext">.csv</span></div>
+      <div class="format-btn" data-fmt="tsv" onclick="pickFormat('tsv')">📄 TSV <span class="ext">.tsv</span></div>
+      <div class="format-btn" data-fmt="jsonl" onclick="pickFormat('jsonl')">📋 JSONL <span class="ext">.jsonl</span></div>
+      <div class="format-btn" data-fmt="json" onclick="pickFormat('json')">📋 JSON <span class="ext">.json</span></div>
+      <div class="format-btn" data-fmt="xlsx" onclick="pickFormat('xlsx')">📊 Excel <span class="ext">.xlsx</span></div>
+    </div>
+    <button class="btn btn-success" id="downloadBtn" onclick="doExport()" disabled style="padding:12px 32px;font-size:15px;">
+      ⬇️ 下载转换文件
+    </button>
+  </div>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+let rawData = [];
+let columns = [];
+let inputFormat = '';
+let selectedFormat = '';
+let originalFileName = 'data';
+
+const fileInput = document.getElementById('fileInput');
+const uploadArea = document.getElementById('uploadArea');
+
+// ==================== 上传交互 ====================
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+// ==================== SheetJS 懒加载 ====================
+let sheetJSLoaded = false;
+function loadSheetJS(callback) {
+  if (sheetJSLoaded) return callback();
+  const s = document.createElement('script');
+  s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+  s.onload = () => { sheetJSLoaded = true; callback(); };
+  s.onerror = () => alert('加载 Excel 解析库失败，请检查网络');
+  document.head.appendChild(s);
+}
+
+// ==================== 文件处理 ====================
+function handleFile(file) {
+  const name = file.name;
+  originalFileName = name.replace(/\.[^.]+$/, '') || 'data';
+  const ext = name.split('.').pop().toLowerCase();
+
+  if (['xlsx', 'xls'].includes(ext)) {
+    loadSheetJS(() => parseExcel(file));
+  } else if (ext === 'jsonl') {
+    readText(file, text => parseJSONL(text));
+  } else if (ext === 'json') {
+    readText(file, text => parseJSON(text));
+  } else {
+    // csv, tsv, txt
+    readText(file, text => parseCSV(text, ext));
+  }
+}
+
+function readText(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => cb(e.target.result);
+  reader.readAsText(file);
+}
+
+// ==================== 解析器 ====================
+function parseCSV(text, ext) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (!lines.length) return alert('文件为空');
+
+  // 自动检测分隔符
+  const first = lines[0];
+  const counts = { ',': 0, '\t': 0, ';': 0, '|': 0 };
+  for (const ch of first) { if (ch in counts) counts[ch]++; }
+  let sep = ',';
+  if (ext === 'tsv') sep = '\t';
+  else {
+    let max = 0;
+    for (const [ch, cnt] of Object.entries(counts)) {
+      if (cnt > max) { max = cnt; sep = ch; }
+    }
+  }
+  inputFormat = sep === '\t' ? 'TSV' : 'CSV';
+
+  // 解析带引号的字段
+  function parseLine(line) {
+    const fields = []; let field = ''; let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuote) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') { field += '"'; i++; }
+          else inQuote = false;
+        } else { field += ch; }
+      } else {
+        if (ch === '"') inQuote = true;
+        else if (ch === sep) { fields.push(field); field = ''; }
+        else if (ch === '\r') { /* skip */ }
+        else field += ch;
+      }
+    }
+    fields.push(field);
+    return fields;
+  }
+
+  const headers = parseLine(lines[0]);
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseLine(lines[i]);
+    const row = {};
+    headers.forEach((h, j) => { row[h] = vals[j] !== undefined ? vals[j] : ''; });
+    data.push(row);
+  }
+  loadData(headers, data);
+}
+
+function parseExcel(file) {
+  inputFormat = 'Excel';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    if (!json.length) return alert('Excel 文件为空');
+    loadData(Object.keys(json[0]), json);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseJSON(text) {
+  inputFormat = 'JSON';
+  try {
+    let data = JSON.parse(text);
+    if (!Array.isArray(data)) {
+      const arrKey = Object.keys(data).find(k => Array.isArray(data[k]));
+      if (arrKey) data = data[arrKey];
+      else return alert('JSON 中未找到数组数据');
+    }
+    if (!data.length) return alert('数据为空');
+    const flat = data.map(item => {
+      if (typeof item !== 'object' || item === null) return { value: item };
+      const obj = {};
+      for (const [k, v] of Object.entries(item)) {
+        obj[k] = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : v;
+      }
+      return obj;
+    });
+    // 收集所有 key
+    const keySet = new Set();
+    flat.forEach(row => Object.keys(row).forEach(k => keySet.add(k)));
+    loadData([...keySet], flat);
+  } catch (e) { alert('JSON 解析失败: ' + e.message); }
+}
+
+function parseJSONL(text) {
+  inputFormat = 'JSONL';
+  const lines = text.split('\n').filter(l => l.trim());
+  if (!lines.length) return alert('文件为空');
+  const data = [];
+  const keySet = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      const obj = JSON.parse(lines[i]);
+      const flat = {};
+      for (const [k, v] of Object.entries(obj)) {
+        flat[k] = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : v;
+        keySet.add(k);
+      }
+      data.push(flat);
+    } catch (e) {
+      // 跳过无法解析的行
+    }
+  }
+  if (!data.length) return alert('JSONL 文件无有效数据');
+  loadData([...keySet], data);
+}
+
+// ==================== 加载数据 ====================
+function loadData(headers, data) {
+  columns = headers.filter(h => h.trim());
+  rawData = data;
+  selectedFormat = '';
+
+  document.getElementById('uploadCard').classList.add('hidden');
+  document.getElementById('dataCard').classList.remove('hidden');
+  document.getElementById('exportCard').classList.remove('hidden');
+
+  // 信息栏
+  document.getElementById('infoBar').innerHTML =
+    `<span class="info-tag format">📥 ${inputFormat}</span>` +
+    `<span class="info-tag rows">📊 ${rawData.length} 行 × ${columns.length} 列</span>` +
+    `<span class="info-tag size">📄 ${originalFileName}</span>`;
+
+  renderTable();
+  resetFormatSelection();
+}
+
+// ==================== 表格渲染 ====================
+function renderTable() {
+  const wrap = document.getElementById('tableWrap');
+  const maxRows = Math.min(rawData.length, 100);
+  let html = '<table><thead><tr>';
+  columns.forEach(col => { html += `<th>${esc(col)}</th>`; });
+  html += '</tr></thead><tbody>';
+  for (let i = 0; i < maxRows; i++) {
+    html += '<tr>';
+    columns.forEach(col => {
+      const v = rawData[i][col];
+      html += `<td>${esc(v == null ? '' : String(v))}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (rawData.length > 100) {
+    html += `<div style="text-align:center;padding:12px;color:#9ca3af;font-size:13px;">仅显示前 100 行，共 ${rawData.length} 行</div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ==================== 格式选择 ====================
+function resetFormatSelection() {
+  selectedFormat = '';
+  document.querySelectorAll('.format-btn').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('downloadBtn').disabled = true;
+}
+
+function pickFormat(fmt) {
+  selectedFormat = fmt;
+  document.querySelectorAll('.format-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.fmt === fmt);
+  });
+  document.getElementById('downloadBtn').disabled = false;
+}
+
+// ==================== 导出 ====================
+function doExport() {
+  if (!selectedFormat || !rawData.length) return;
+
+  switch (selectedFormat) {
+    case 'csv': exportDelimited(',', '.csv'); break;
+    case 'tsv': exportDelimited('\t', '.tsv'); break;
+    case 'jsonl': exportJSONL(); break;
+    case 'json': exportJSON(); break;
+    case 'xlsx': loadSheetJS(() => exportXLSX()); break;
+  }
+}
+
+function exportDelimited(sep, ext) {
+  // CSV 字段转义
+  function escape(val) {
+    const s = val == null ? '' : String(val);
+    if (s.includes(sep) || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+  let text = columns.map(escape).join(sep) + '\n';
+  rawData.forEach(row => {
+    text += columns.map(col => escape(row[col])).join(sep) + '\n';
+  });
+  // UTF-8 BOM for CSV
+  const bom = ext === '.csv' ? '\uFEFF' : '';
+  downloadBlob(bom + text, originalFileName + ext, 'text/plain;charset=utf-8');
+}
+
+function exportJSONL() {
+  const lines = rawData.map(row => {
+    const obj = {};
+    columns.forEach(col => {
+      const v = row[col];
+      obj[col] = v !== undefined ? v : '';
+    });
+    return JSON.stringify(obj);
+  });
+  downloadBlob(lines.join('\n'), originalFileName + '.jsonl', 'application/x-jsonlines;charset=utf-8');
+}
+
+function exportJSON() {
+  const arr = rawData.map(row => {
+    const obj = {};
+    columns.forEach(col => {
+      const v = row[col];
+      obj[col] = v !== undefined ? v : '';
+    });
+    return obj;
+  });
+  downloadBlob(JSON.stringify(arr, null, 2), originalFileName + '.json', 'application/json;charset=utf-8');
+}
+
+function exportXLSX() {
+  const ws = XLSX.utils.json_to_sheet(rawData, { header: columns });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, originalFileName + '.xlsx');
+}
+
+function downloadBlob(text, filename, mime) {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ==================== 重置 ====================
+function resetAll() {
+  rawData = [];
+  columns = [];
+  inputFormat = '';
+  selectedFormat = '';
+  fileInput.value = '';
+  document.getElementById('uploadCard').classList.remove('hidden');
+  document.getElementById('dataCard').classList.add('hidden');
+  document.getElementById('exportCard').classList.add('hidden');
+}
+</script>
+</body>
+</html>
