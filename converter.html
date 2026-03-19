@@ -491,18 +491,17 @@ function exportJSON() {
 
 function exportXLSX() {
   try {
-    // Excel 单元格最大 32767 字符，截断超长文本
-    const MAX_CELL = 32767;
-    const safeData = rawData.map(row => {
-      const r = {};
-      columns.forEach(col => {
-        const v = row[col];
-        const s = v == null ? '' : String(v);
-        r[col] = s.length > MAX_CELL ? s.slice(0, MAX_CELL - 3) + '...' : s;
-      });
-      return r;
+    // Excel 单元格最大 32767 字符，用 aoa 方式构建避免 json_to_sheet 内部校验
+    const MAX_CELL = 32000;
+    function safe(v) {
+      const s = v == null ? '' : String(v);
+      return s.length > MAX_CELL ? s.slice(0, MAX_CELL) + '...' : s;
+    }
+    const aoa = [columns.map(safe)];
+    rawData.forEach(row => {
+      aoa.push(columns.map(col => safe(row[col])));
     });
-    const ws = XLSX.utils.json_to_sheet(safeData, { header: columns });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, originalFileName + '.xlsx');
