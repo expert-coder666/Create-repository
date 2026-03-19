@@ -491,7 +491,18 @@ function exportJSON() {
 
 function exportXLSX() {
   try {
-    const ws = XLSX.utils.json_to_sheet(rawData, { header: columns });
+    // Excel 单元格最大 32767 字符，截断超长文本
+    const MAX_CELL = 32767;
+    const safeData = rawData.map(row => {
+      const r = {};
+      columns.forEach(col => {
+        const v = row[col];
+        const s = v == null ? '' : String(v);
+        r[col] = s.length > MAX_CELL ? s.slice(0, MAX_CELL - 3) + '...' : s;
+      });
+      return r;
+    });
+    const ws = XLSX.utils.json_to_sheet(safeData, { header: columns });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, originalFileName + '.xlsx');
