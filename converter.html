@@ -175,26 +175,52 @@ uploadArea.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
 
-// ==================== SheetJS 懒加载 ====================
+// ==================== SheetJS 加载 ====================
 let sheetJSLoaded = false;
+let sheetJSLoading = false;
+let sheetJSCallbacks = [];
 const SHEETJS_CDNS = [
+  'https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
 ];
 function loadSheetJS(callback) {
   if (sheetJSLoaded) return callback();
+  sheetJSCallbacks.push(callback);
+  if (sheetJSLoading) return; // 已在加载中，等回调
+  sheetJSLoading = true;
   let idx = 0;
   function tryNext() {
-    if (idx >= SHEETJS_CDNS.length) { alert('加载 Excel 库失败，请检查网络'); return; }
+    if (idx >= SHEETJS_CDNS.length) {
+      sheetJSLoading = false;
+      sheetJSCallbacks = [];
+      alert('加载 Excel 库失败，请检查网络后刷新页面重试');
+      return;
+    }
     const s = document.createElement('script');
     s.src = SHEETJS_CDNS[idx++];
-    s.onload = () => { sheetJSLoaded = true; callback(); };
-    s.onerror = () => { s.remove(); tryNext(); };
+    // 每个 CDN 5 秒超时
+    const timer = setTimeout(() => { s.onerror(); }, 5000);
+    s.onload = () => {
+      clearTimeout(timer);
+      sheetJSLoaded = true;
+      sheetJSLoading = false;
+      // 更新 Excel 按钮状态
+      const xlsxBtn = document.querySelector('[data-fmt="xlsx"]');
+      if (xlsxBtn) xlsxBtn.title = '';
+      // 执行所有等待的回调
+      const cbs = sheetJSCallbacks.slice();
+      sheetJSCallbacks = [];
+      cbs.forEach(cb => { try { cb(); } catch(e) {} });
+    };
+    s.onerror = () => { clearTimeout(timer); s.remove(); tryNext(); };
     document.head.appendChild(s);
   }
   tryNext();
 }
+// 页面加载后立即预加载 SheetJS
+window.addEventListener('load', () => loadSheetJS(() => {}));
 
 // ==================== 文件处理 ====================
 function handleFile(file) {
@@ -394,13 +420,30 @@ function pickFormat(fmt) {
 // ==================== 导出 ====================
 function doExport() {
   if (!selectedFormat || !rawData.length) return;
-
-  switch (selectedFormat) {
-    case 'csv': exportDelimited(',', '.csv'); break;
-    case 'tsv': exportDelimited('\t', '.tsv'); break;
-    case 'jsonl': exportJSONL(); break;
-    case 'json': exportJSON(); break;
-    case 'xlsx': loadSheetJS(() => exportXLSX()); break;
+  try {
+    switch (selectedFormat) {
+      case 'csv': exportDelimited(',', '.csv'); break;
+      case 'tsv': exportDelimited('\t', '.tsv'); break;
+      case 'jsonl': exportJSONL(); break;
+      case 'json': exportJSON(); break;
+      case 'xlsx':
+        if (sheetJSLoaded) {
+          exportXLSX();
+        } else {
+          const btn = document.getElementById('downloadBtn');
+          const oldText = btn.textContent;
+          btn.textContent = '⏳ 正在加载 Excel 库...';
+          btn.disabled = true;
+          loadSheetJS(() => {
+            btn.textContent = oldText;
+            btn.disabled = false;
+            exportXLSX();
+          });
+        }
+        break;
+    }
+  } catch (e) {
+    alert('导出失败: ' + e.message);
   }
 }
 
@@ -456,14 +499,18 @@ function exportXLSX() {
 }
 
 function downloadBlob(text, filename, mime) {
-  const blob = new Blob([text], { type: mime });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 200);
+  try {
+    const blob = new Blob([text], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 200);
+  } catch (e) {
+    alert('下载失败: ' + e.message);
+  }
 }
 
 // ==================== 重置 ====================
