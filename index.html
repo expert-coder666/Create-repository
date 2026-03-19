@@ -224,6 +224,40 @@ canvas { width: 100% !important; max-height: 300px; }
 .tag-summary-stat .label { font-size: 11px; color: #0284c7; letter-spacing: 0.5px; }
 .tag-summary-stat .value { font-size: 1.3em; font-weight: 700; color: #0369a1; margin-top: 2px; }
 
+/* 拖拽与编辑 */
+.tag-sub-item[draggable="true"] {
+  cursor: grab; position: relative;
+}
+.tag-sub-item[draggable="true"]:active { cursor: grabbing; }
+.tag-sub-item.dragging { opacity: 0.4; transform: scale(0.95); }
+.tag-category.drag-over {
+  background: #ede9fe; border-color: #7c3aed !important;
+  box-shadow: inset 0 0 0 2px #7c3aed;
+}
+.tag-sub-item .drag-handle {
+  color: #cbd5e1; font-size: 10px; margin-right: 2px; cursor: grab;
+  user-select: none; line-height: 1;
+}
+.tag-sub-item:hover .drag-handle { color: #7c3aed; }
+.tag-category-name-editable {
+  outline: none; border-bottom: 1px dashed transparent; padding-bottom: 1px;
+  transition: border-color 0.2s; cursor: text; min-width: 40px;
+}
+.tag-category-name-editable:hover { border-bottom-color: #a78bfa; }
+.tag-category-name-editable:focus {
+  border-bottom-color: #7c3aed; background: #f5f3ff; border-radius: 3px;
+  padding: 0 4px;
+}
+.tag-category-name .edit-hint {
+  font-size: 10px; color: #cbd5e1; margin-left: 4px; opacity: 0;
+  transition: opacity 0.2s;
+}
+.tag-category-name:hover .edit-hint { opacity: 1; }
+.tag-manual-badge {
+  font-size: 9px; background: #fef3c7; color: #92400e; padding: 1px 5px;
+  border-radius: 4px; margin-left: 4px;
+}
+
 /* 响应式 */
 @media (max-width: 640px) {
   body { padding: 10px; }
@@ -1580,6 +1614,106 @@ function mergeSimilarTags(tagFreq, threshold) {
 // ==================== 主观题分析：主入口 ====================
 let currentSubjThreshold = 0.5;
 
+// 用户手动调整记录（拖拽分类 & 标题编辑），会话内持久化
+const tagCategoryOverrides = {};   // { tagCanonical: targetCategoryName(原始名) }
+const categoryNameEdits = {};      // { originalCatName: userEditedName }
+
+// ====== 拖拽与编辑辅助函数 ======
+let _dragTagName = null;
+let _dragSourceCat = null;
+
+function onTagDragStart(e) {
+  _dragTagName = e.target.dataset.tag;
+  _dragSourceCat = e.target.dataset.cat;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _dragTagName);
+}
+function onTagDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.tag-category.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+function onCategoryDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onCategoryDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function onCategoryDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const targetCat = e.currentTarget.dataset.catOriginal;
+  if (!_dragTagName || targetCat === _dragSourceCat) return;
+  // 记录用户的手动分类覆盖
+  tagCategoryOverrides[_dragTagName] = targetCat;
+  // 即时移动 DOM：从源分类移到目标分类
+  const tagEl = document.querySelector(`.tag-sub-item[data-tag="${CSS.escape(_dragTagName)}"]`);
+  if (tagEl) {
+    tagEl.dataset.cat = targetCat;
+    // 添加手动标记
+    if (!tagEl.querySelector('.tag-manual-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'tag-manual-badge';
+      badge.textContent = '手动';
+      tagEl.appendChild(badge);
+    }
+    const targetSubcategories = e.currentTarget.querySelector('.tag-subcategories');
+    if (targetSubcategories) targetSubcategories.appendChild(tagEl);
+    // 更新两侧统计
+    updateCategoryStats();
+  }
+}
+function updateCategoryStats() {
+  document.querySelectorAll('.tag-category[data-cat-original]').forEach(catEl => {
+    const items = catEl.querySelectorAll('.tag-sub-item');
+    let totalCount = 0;
+    items.forEach(item => { totalCount += parseInt(item.dataset.count) || 0; });
+    const badgeEl = catEl.querySelector('.tag-category-badge');
+    if (badgeEl) badgeEl.textContent = items.length + ' 个标签';
+    const statsSpans = catEl.querySelectorAll('.tag-category-stats span');
+    if (statsSpans[0]) statsSpans[0].textContent = totalCount + ' 次';
+    // 重新计算百分比
+    let globalTotal = 0;
+    document.querySelectorAll('.tag-category[data-cat-original] .tag-sub-item').forEach(item => {
+      globalTotal += parseInt(item.dataset.count) || 0;
+    });
+    if (statsSpans[1] && globalTotal > 0) {
+      statsSpans[1].textContent = (totalCount / globalTotal * 100).toFixed(1) + '%';
+    }
+  });
+}
+function onCategoryTitleEdit(e) {
+  const el = e.target;
+  const originalName = el.dataset.originalCat;
+  const newName = el.textContent.trim();
+  if (newName && newName !== originalName) {
+    categoryNameEdits[originalName] = newName;
+  } else {
+    delete categoryNameEdits[originalName];
+  }
+}
+function onCategoryTitleKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+}
+// 绑定拖拽事件到动态渲染的内容
+function bindDragAndEdit() {
+  document.querySelectorAll('.tag-sub-item[draggable="true"]').forEach(el => {
+    el.addEventListener('dragstart', onTagDragStart);
+    el.addEventListener('dragend', onTagDragEnd);
+  });
+  document.querySelectorAll('.tag-category[data-cat-original]').forEach(el => {
+    el.addEventListener('dragover', onCategoryDragOver);
+    el.addEventListener('dragleave', onCategoryDragLeave);
+    el.addEventListener('drop', onCategoryDrop);
+  });
+  document.querySelectorAll('.tag-category-name-editable').forEach(el => {
+    el.addEventListener('blur', onCategoryTitleEdit);
+    el.addEventListener('keydown', onCategoryTitleKeydown);
+  });
+}
+
 // ==================== 标签聚类总结 ====================
 const TAG_TAXONOMY = {
   '内容质量': {
@@ -1698,11 +1832,11 @@ function renderTagSummary(cols, threshold) {
   // 合并相似标签
   const groups = mergeSimilarTags(globalTagFreq, threshold);
 
-  // 按一级分类聚类
+  // 按一级分类聚类（优先使用用户手动覆盖）
   const clustered = {};
   const OTHER_KEY = '其他';
   groups.forEach(g => {
-    const cat = classifyTag(g.canonical);
+    const cat = tagCategoryOverrides[g.canonical] || classifyTag(g.canonical);
     if (!clustered[cat]) clustered[cat] = { tags: [], totalCount: 0 };
     clustered[cat].tags.push(g);
     clustered[cat].totalCount += g.totalCount;
@@ -1714,11 +1848,17 @@ function renderTagSummary(cols, threshold) {
   categoryOrder.forEach(cat => {
     if (clustered[cat]) sortedCategories.push([cat, clustered[cat]]);
   });
+  // 用户可能通过拖拽创建了新的自定义分类（编辑标题后），也需要展示
+  Object.keys(clustered).forEach(cat => {
+    if (cat !== OTHER_KEY && !categoryOrder.includes(cat) && !sortedCategories.find(s => s[0] === cat)) {
+      sortedCategories.push([cat, clustered[cat]]);
+    }
+  });
   if (clustered[OTHER_KEY]) sortedCategories.push([OTHER_KEY, clustered[OTHER_KEY]]);
 
   // 开始渲染
   let html = '<div class="tag-summary">';
-  html += '<div class="tag-summary-title">📊 所有标签聚类总结</div>';
+  html += '<div class="tag-summary-title">📊 所有标签聚类总结 <span style="font-size:11px;color:#94a3b8;font-weight:400;">（可拖拽标签到其他分类，点击分类名可编辑）</span></div>';
 
   // 概览统计
   html += '<div class="tag-summary-overview">';
@@ -1732,15 +1872,17 @@ function renderTagSummary(cols, threshold) {
   sortedCategories.forEach(([catName, catData]) => {
     const config = TAG_TAXONOMY[catName] || { icon: '📌', color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' };
     const catPct = (catData.totalCount / globalTotal * 100).toFixed(1);
+    const displayName = categoryNameEdits[catName] || catName;
 
     // 二级标签按频次排序
     catData.tags.sort((a, b) => b.totalCount - a.totalCount);
 
-    html += `<div class="tag-category" style="border-color:${config.border};">`;
-    html += `<div class="tag-category-header" onclick="this.parentElement.querySelector('.tag-subcategories').classList.toggle('hidden')">`;
-    html += `<div class="tag-category-name">`;
+    html += `<div class="tag-category" data-cat-original="${escapeHtml(catName)}" style="border-color:${config.border};">`;
+    html += `<div class="tag-category-header">`;
+    html += `<div class="tag-category-name" onclick="event.stopPropagation(); this.parentElement.parentElement.querySelector('.tag-subcategories').classList.toggle('hidden')">`;
     html += `<span>${config.icon}</span>`;
-    html += `<span style="color:${config.color};">${escapeHtml(catName)}</span>`;
+    html += `<span class="tag-category-name-editable" contenteditable="true" data-original-cat="${escapeHtml(catName)}" style="color:${config.color};" onclick="event.stopPropagation()">${escapeHtml(displayName)}</span>`;
+    html += `<span class="edit-hint">✏️</span>`;
     html += `<span class="tag-category-badge" style="background:${config.bg};color:${config.color};">${catData.tags.length} 个标签</span>`;
     html += `</div>`;
     html += `<div class="tag-category-stats">`;
@@ -1752,10 +1894,13 @@ function renderTagSummary(cols, threshold) {
     html += '<div class="tag-subcategories">';
     catData.tags.forEach(g => {
       const pct = (g.totalCount / globalTotal * 100).toFixed(1);
-      html += `<div class="tag-sub-item">`;
+      const isManual = tagCategoryOverrides.hasOwnProperty(g.canonical);
+      html += `<div class="tag-sub-item" draggable="true" data-tag="${escapeHtml(g.canonical)}" data-cat="${escapeHtml(catName)}" data-count="${g.totalCount}">`;
+      html += `<span class="drag-handle">⠿</span>`;
       html += `<span class="tag-name">${escapeHtml(g.canonical)}</span>`;
       html += `<span class="tag-count">${g.totalCount}</span>`;
       html += `<span class="tag-pct">${pct}%</span>`;
+      if (isManual) html += `<span class="tag-manual-badge">手动</span>`;
       html += `</div>`;
     });
     html += '</div>';
@@ -1788,6 +1933,9 @@ function analyzeSubjective() {
 
   document.getElementById('subjResultCard').classList.remove('hidden');
   document.getElementById('subjResultCard').scrollIntoView({ behavior: 'smooth' });
+
+  // 绑定拖拽和编辑事件
+  bindDragAndEdit();
 }
 
 function renderSubjectiveCol(col, threshold) {
