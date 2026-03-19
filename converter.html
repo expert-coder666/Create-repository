@@ -251,13 +251,13 @@ function readText(file, cb) {
 
 // ==================== 解析器 ====================
 function parseCSV(text, ext) {
-  const lines = text.split('\n').filter(l => l.trim());
-  if (!lines.length) return alert('文件为空');
+  if (!text.trim()) return alert('文件为空');
 
-  // 自动检测分隔符
-  const first = lines[0];
+  // 自动检测分隔符（仅看第一行）
+  const firstLineEnd = text.indexOf('\n');
+  const firstLine = firstLineEnd > 0 ? text.substring(0, firstLineEnd) : text;
   const counts = { ',': 0, '\t': 0, ';': 0, '|': 0 };
-  for (const ch of first) { if (ch in counts) counts[ch]++; }
+  for (const ch of firstLine) { if (ch in counts) counts[ch]++; }
   let sep = ',';
   if (ext === 'tsv') sep = '\t';
   else {
@@ -268,36 +268,48 @@ function parseCSV(text, ext) {
   }
   inputFormat = sep === '\t' ? 'TSV' : 'CSV';
 
-  // 解析带引号的字段
-  function parseLine(line) {
-    const fields = []; let field = ''; let inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuote) {
-        if (ch === '"') {
-          if (i + 1 < line.length && line[i + 1] === '"') { field += '"'; i++; }
-          else inQuote = false;
-        } else { field += ch; }
+  // 逐字符解析，支持多行引号字段
+  const rows = [];
+  let row = [], field = '', inQuote = false, i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (i + 1 < text.length && text[i + 1] === '"') {
+          field += '"'; i += 2;
+        } else {
+          inQuote = false; i++;
+        }
       } else {
-        if (ch === '"') inQuote = true;
-        else if (ch === sep) { fields.push(field); field = ''; }
-        else if (ch === '\r') { /* skip */ }
-        else field += ch;
+        field += ch; i++;
       }
+    } else {
+      if (ch === '"') { inQuote = true; i++; }
+      else if (ch === sep) { row.push(field); field = ''; i++; }
+      else if (ch === '\r') { i++; }
+      else if (ch === '\n') {
+        row.push(field); field = '';
+        if (row.some(f => f.trim())) rows.push(row);
+        row = []; i++;
+      } else { field += ch; i++; }
     }
-    fields.push(field);
-    return fields;
+  }
+  if (field || row.length > 0) {
+    row.push(field);
+    if (row.some(f => f.trim())) rows.push(row);
   }
 
-  const headers = parseLine(lines[0]);
+  if (rows.length < 2) return alert('文件数据不足');
+
+  const headers = rows[0];
   const data = [];
-  for (let i = 1; i < lines.length; i++) {
-    const vals = parseLine(lines[i]);
-    const row = {};
-    headers.forEach((h, j) => { row[h] = vals[j] !== undefined ? vals[j] : ''; });
-    data.push(row);
+  for (let r = 1; r < rows.length; r++) {
+    const vals = rows[r];
+    const obj = {};
+    headers.forEach((h, j) => { obj[h] = vals[j] !== undefined ? vals[j] : ''; });
+    data.push(obj);
   }
-  loadData(headers, data);
+  loadData(headers.filter(h => h.trim()), data);
 }
 
 function parseExcel(file) {
