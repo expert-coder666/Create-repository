@@ -494,17 +494,29 @@ function exportJSON() {
 
 function exportXLSX() {
   try {
-    // Excel 单元格最大 32767 字符，用 aoa 方式构建避免 json_to_sheet 内部校验
+    // 先截断超长文本，再用 json_to_sheet 保持正确列映射
     const MAX_CELL = 32000;
-    function safe(v) {
-      const s = v == null ? '' : String(v);
-      return s.length > MAX_CELL ? s.slice(0, MAX_CELL) + '...' : s;
-    }
-    const aoa = [columns.map(safe)];
-    rawData.forEach(row => {
-      aoa.push(columns.map(col => safe(row[col])));
+    const safeData = rawData.map(row => {
+      const r = {};
+      columns.forEach(col => {
+        const v = row[col];
+        const s = v == null ? '' : String(v);
+        r[col] = s.length > MAX_CELL ? s.slice(0, MAX_CELL) + '...' : s;
+      });
+      return r;
     });
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const ws = XLSX.utils.json_to_sheet(safeData, { header: columns });
+    // 二次保险：遍历所有单元格截断
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = ws[XLSX.utils.encode_cell({r: R, c: C})];
+        if (cell && cell.t === 's' && cell.v && cell.v.length > MAX_CELL) {
+          cell.v = cell.v.slice(0, MAX_CELL) + '...';
+          if (cell.w) delete cell.w;
+        }
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, originalFileName + '.xlsx');
