@@ -431,15 +431,20 @@ window.addEventListener('load', () => loadSheetJS(() => {}));
 
 // ==================== 解析器 ====================
 function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return alert('数据行数不足');
-  // 自动检测分隔符
-  const sep = detectSeparator(lines[0]);
-  const headers = parseCSVLine(lines[0], sep);
+  // 先取第一行检测分隔符（第一行为表头，通常不含引号内换行）
+  const firstLineEnd = text.indexOf('\n');
+  if (firstLineEnd === -1) return alert('数据行数不足');
+  const firstLine = text.substring(0, firstLineEnd).replace(/\r$/, '');
+  const sep = detectSeparator(firstLine);
+  // 用引号感知解析器解析整个文本
+  const allRows = parseCSVAll(text, sep);
+  if (allRows.length < 2) return alert('数据行数不足');
+  const headers = allRows[0];
   const data = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const vals = parseCSVLine(lines[i], sep);
+  for (let i = 1; i < allRows.length; i++) {
+    const vals = allRows[i];
+    // 跳过完全为空的行
+    if (vals.length === 1 && vals[0] === '') continue;
     const row = {};
     headers.forEach((h, j) => row[h] = vals[j] !== undefined ? vals[j] : '');
     data.push(row);
@@ -448,13 +453,84 @@ function parseCSV(text) {
 }
 
 function detectSeparator(line) {
+  // 在引号外统计分隔符出现次数，避免引号内容干扰
   const counts = { ',': 0, '\t': 0, ';': 0, '|': 0 };
-  for (const ch of line) { if (ch in counts) counts[ch]++; }
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') i++;
+      else if (ch === '"') inQuotes = false;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch in counts) counts[ch]++;
+    }
+  }
   let best = ',', max = 0;
   for (const [k, v] of Object.entries(counts)) { if (v > max) { max = v; best = k; } }
   return best;
 }
 
+// 引号感知的完整 CSV 解析器，正确处理字段内换行符
+function parseCSVAll(text, sep) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+  let row = [];
+  let i = 0;
+  const len = text.length;
+  while (i < len) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < len && text[i + 1] === '"') {
+          current += '"';
+          i += 2;
+        } else {
+          inQuotes = false;
+          i++;
+        }
+      } else {
+        current += ch;
+        i++;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+        i++;
+      } else if (ch === sep) {
+        row.push(current.trim());
+        current = '';
+        i++;
+      } else if (ch === '\r') {
+        // 处理 \r\n 或单独 \r
+        row.push(current.trim());
+        current = '';
+        rows.push(row);
+        row = [];
+        if (i + 1 < len && text[i + 1] === '\n') i++;
+        i++;
+      } else if (ch === '\n') {
+        row.push(current.trim());
+        current = '';
+        rows.push(row);
+        row = [];
+        i++;
+      } else {
+        current += ch;
+        i++;
+      }
+    }
+  }
+  // 处理最后一个字段/行
+  if (current !== '' || row.length > 0) {
+    row.push(current.trim());
+    rows.push(row);
+  }
+  return rows;
+}
+
+// 保留单行解析函数供其他地方调用
 function parseCSVLine(line, sep) {
   const result = []; let current = ''; let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
