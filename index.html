@@ -275,6 +275,7 @@ canvas { width: 100% !important; max-height: 300px; }
   <div class="tab-nav hidden" id="tabNav">
     <button class="tab-btn active" onclick="switchTab('objective')">📋 客观数据分析</button>
     <button class="tab-btn" onclick="switchTab('subjective')">🏷️ 主观题分析</button>
+    <button class="tab-btn" onclick="switchTab('agreement')">🔍 多人拟合分析</button>
     <button class="tab-btn" onclick="switchTab('manage')">🗑️ 删除列/导出</button>
   </div>
 
@@ -341,6 +342,24 @@ canvas { width: 100% !important; max-height: 300px; }
 
   <!-- ========== 删除列/导出 Tab ========== -->
   <div class="tab-page" id="tab-manage">
+
+  <!-- ========== 多人拟合分析 Tab ========== -->
+  <div class="tab-page" id="tab-agreement">
+  <div class="card hidden" id="agreeCard">
+    <h2>🔍 多人拟合一致性分析</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">自动检测 <code>*_组件拟合一致率</code> 和 <code>*_mark_N</code> 列，分析多人标注的不一致数据</p>
+    <div class="toolbar">
+      <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
+      <button class="btn btn-outline" onclick="analyzeAgreement()">开始分析</button>
+      <div class="info" id="agreeDataInfo"></div>
+    </div>
+    <div id="agreeDimensions" style="margin-top:12px;"></div>
+  </div>
+  <div class="card hidden" id="agreeResultCard">
+    <h2>📊 拟合分析结果</h2>
+    <div id="agreeResultContent"></div>
+  </div>
+  </div>
   <div class="card hidden" id="manageCard">
     <h2>🗑️ 删除列 / 导出数据</h2>
     <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">选择要删除的列（标红），确认后可导出清理后的数据</p>
@@ -596,10 +615,13 @@ function loadData(headers, data) {
   document.getElementById('resultCard').classList.add('hidden');
   document.getElementById('subjCard').classList.remove('hidden');
   document.getElementById('subjResultCard').classList.add('hidden');
+  document.getElementById('agreeCard').classList.remove('hidden');
+  document.getElementById('agreeResultCard').classList.add('hidden');
   document.getElementById('manageCard').classList.remove('hidden');
   document.getElementById('dataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   document.getElementById('subjDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   document.getElementById('manageDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
+  document.getElementById('agreeDataInfo').textContent = `${rawData.length} 行 × ${columns.length} 列`;
   renderColSelector();
   renderSubjColSelector();
   renderManageColSelector();
@@ -617,6 +639,8 @@ function resetAll() {
   document.getElementById('resultCard').classList.add('hidden');
   document.getElementById('subjCard').classList.add('hidden');
   document.getElementById('subjResultCard').classList.add('hidden');
+  document.getElementById('agreeCard').classList.add('hidden');
+  document.getElementById('agreeResultCard').classList.add('hidden');
   document.getElementById('manageCard').classList.add('hidden');
   // Reset tab to objective
   switchTab('objective');
@@ -1141,11 +1165,15 @@ function showClassificationModal(unclassified, callback) {
       </tr></thead><tbody>${rows}</tbody>
     </table>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+      <button id="clsExitBtn" style="padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-size:13px;cursor:pointer;transition:background .15s;">退出</button>
       <button id="clsSkipBtn" style="padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#374151;font-size:13px;cursor:pointer;transition:background .15s;">全部算异常</button>
       <button id="clsConfirmBtn" style="padding:8px 24px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;">确认归类</button>
     </div></div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e => { if (e.target === overlay) return; }); // prevent bg close
+  overlay.querySelector('#clsExitBtn').addEventListener('click', () => {
+    overlay.remove();
+  });
   overlay.querySelector('#clsSkipBtn').addEventListener('click', () => {
     labels.forEach(([label]) => { userClassifications[label] = 'anomaly'; });
     overlay.remove(); callback();
@@ -1460,7 +1488,7 @@ function escapeHtml(s) {
 
 // ==================== Tab 切换 ====================
 function switchTab(tabId) {
-  const tabIds = ['objective', 'subjective', 'manage'];
+  const tabIds = ['objective', 'subjective', 'agreement', 'manage'];
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', tabIds[i] === tabId);
   });
@@ -2175,6 +2203,217 @@ function updateThreshold(val, col) {
   if (label) label.textContent = (currentSubjThreshold * 100).toFixed(0) + '%';
   // 重新分析
   analyzeSubjective();
+}
+
+// ==================== 多人拟合分析 ====================
+
+// 自动检测维度：扫描列名，找到 *_组件拟合一致率 和对应的 *_mark_N、*_mark_N_备注
+function detectAgreementDimensions() {
+  const dims = {};
+  // 找一致率列
+  const ratePattern = /^(.+?)_组件拟合一致率$/;
+  const overallRate = columns.find(c => c === '标注拟合一致率');
+  columns.forEach(col => {
+    const m = col.match(ratePattern);
+    if (m) {
+      const dimName = m[1];
+      if (!dims[dimName]) dims[dimName] = { rateCols: [], markCols: [], noteCols: [] };
+      dims[dimName].rateCols.push(col);
+    }
+  });
+  // 找 mark 列和备注列
+  const markPattern = /^(.+?)_mark_(\d+)$/;
+  const notePattern = /^(.+?)_mark_(\d+)_备注$/;
+  columns.forEach(col => {
+    const nm = col.match(notePattern);
+    if (nm) {
+      const dimName = nm[1], idx = parseInt(nm[2]);
+      if (!dims[dimName]) dims[dimName] = { rateCols: [], markCols: [], noteCols: [] };
+      dims[dimName].noteCols.push({ col, idx });
+      return;
+    }
+    const mm = col.match(markPattern);
+    if (mm) {
+      const dimName = mm[1], idx = parseInt(mm[2]);
+      if (!dims[dimName]) dims[dimName] = { rateCols: [], markCols: [], noteCols: [] };
+      dims[dimName].markCols.push({ col, idx });
+    }
+  });
+  // 排序 mark 和 note
+  Object.values(dims).forEach(d => {
+    d.markCols.sort((a, b) => a.idx - b.idx);
+    d.noteCols.sort((a, b) => a.idx - b.idx);
+  });
+  return { dims, overallRate };
+}
+
+function analyzeAgreement() {
+  const { dims, overallRate } = detectAgreementDimensions();
+  const dimNames = Object.keys(dims);
+  if (dimNames.length === 0) {
+    alert('未检测到多人拟合列。\n请确保列名包含 "*_组件拟合一致率" 和 "*_mark_N" 格式。');
+    return;
+  }
+  document.getElementById('agreeResultCard').classList.remove('hidden');
+  let html = '';
+
+  // 总览卡片
+  html += '<div style="background:#f5f3ff;border-radius:12px;padding:20px;margin-bottom:24px;">';
+  html += '<h3 style="font-size:16px;color:#5b21b6;margin-bottom:12px;">📊 拟合总览</h3>';
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+
+  // 整体一致率
+  if (overallRate) {
+    const vals = rawData.map(r => r[overallRate]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+    const full = vals.filter(v => parseFloat(String(v)) === 100 || String(v).trim() === '100.00%' || String(v).trim() === '100%').length;
+    const pct = vals.length ? (full / vals.length * 100).toFixed(1) : '0.0';
+    html += `<div style="background:#fff;border-radius:10px;padding:14px 20px;min-width:160px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:12px;color:#6b7280;">整体一致率</div>
+      <div style="font-size:28px;font-weight:700;color:${parseFloat(pct) >= 90 ? '#059669' : parseFloat(pct) >= 70 ? '#d97706' : '#dc2626'};">${pct}%</div>
+      <div style="font-size:11px;color:#9ca3af;">完全一致 ${full}/${vals.length}</div></div>`;
+  }
+
+  // 各维度概览
+  dimNames.forEach(dimName => {
+    const dim = dims[dimName];
+    const rateCol = dim.rateCols[0];
+    if (!rateCol) return;
+    const vals = rawData.map(r => r[rateCol]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+    const full = vals.filter(v => {
+      const n = parseFloat(String(v));
+      return n === 100 || String(v).trim() === '100.00%' || String(v).trim() === '100%';
+    }).length;
+    const inconsistent = vals.length - full;
+    const pct = vals.length ? (full / vals.length * 100).toFixed(1) : '0.0';
+    html += `<div style="background:#fff;border-radius:10px;padding:14px 20px;min-width:160px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:12px;color:#6b7280;">${escapeHtml(dimName)}</div>
+      <div style="font-size:28px;font-weight:700;color:${parseFloat(pct) >= 90 ? '#059669' : parseFloat(pct) >= 70 ? '#d97706' : '#dc2626'};">${pct}%</div>
+      <div style="font-size:11px;color:#9ca3af;">一致 ${full} · 不一致 ${inconsistent} · 标注者 ${dim.markCols.length}人</div></div>`;
+  });
+  html += '</div></div>';
+
+  // 各维度详细分析
+  dimNames.forEach(dimName => {
+    const dim = dims[dimName];
+    const rateCol = dim.rateCols[0];
+    if (!rateCol || dim.markCols.length === 0) return;
+
+    html += `<div style="margin-bottom:32px;">`;
+    html += `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #ede9fe;">🔍 ${escapeHtml(dimName)} — 不一致数据详情</h3>`;
+
+    // 筛选不一致行
+    const inconsistentRows = [];
+    rawData.forEach((row, rowIdx) => {
+      const rateVal = row[rateCol];
+      if (rateVal === null || rateVal === undefined || String(rateVal).trim() === '') return;
+      const rate = parseFloat(String(rateVal));
+      if (rate < 100 && String(rateVal).trim() !== '100%' && String(rateVal).trim() !== '100.00%') {
+        inconsistentRows.push({ row, rowIdx, rate });
+      }
+    });
+
+    if (inconsistentRows.length === 0) {
+      html += '<p style="color:#059669;font-size:14px;">✅ 所有数据完全一致，无不一致项</p></div>';
+      return;
+    }
+
+    html += `<p style="font-size:13px;color:#6b7280;margin-bottom:12px;">共 <strong style="color:#dc2626;">${inconsistentRows.length}</strong> 条不一致数据</p>`;
+
+    // ── 不一致原因分析 ──
+    const disagreementPatterns = {};
+    inconsistentRows.forEach(({ row }) => {
+      const marks = dim.markCols.map(mc => {
+        const v = row[mc.col];
+        return v !== null && v !== undefined ? String(v).trim() : '';
+      });
+      // 将各标注者的值组合成分歧模式
+      const uniqueVals = [...new Set(marks.filter(m => m !== ''))];
+      if (uniqueVals.length >= 2) {
+        const pattern = uniqueVals.sort().join(' vs ');
+        if (!disagreementPatterns[pattern]) disagreementPatterns[pattern] = 0;
+        disagreementPatterns[pattern]++;
+      }
+    });
+
+    const sortedPatterns = Object.entries(disagreementPatterns).sort((a, b) => b[1] - a[1]);
+    if (sortedPatterns.length > 0) {
+      html += '<div style="background:#fef2f2;border-radius:10px;padding:16px;margin-bottom:16px;">';
+      html += '<h4 style="font-size:14px;color:#dc2626;margin-bottom:10px;">⚡ 不一致原因分布（Top 10）</h4>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      html += '<thead><tr style="background:#fee2e2;"><th style="padding:8px 12px;text-align:left;">分歧模式</th><th style="padding:8px 12px;text-align:center;">次数</th><th style="padding:8px 12px;text-align:left;">占比</th></tr></thead><tbody>';
+      sortedPatterns.slice(0, 10).forEach(([pattern, count]) => {
+        const pct = (count / inconsistentRows.length * 100).toFixed(1);
+        const barW = (count / sortedPatterns[0][1] * 100).toFixed(0);
+        html += `<tr style="border-bottom:1px solid #fecaca;">
+          <td style="padding:8px 12px;font-weight:500;">${escapeHtml(pattern)}</td>
+          <td style="padding:8px 12px;text-align:center;">${count}</td>
+          <td style="padding:8px 12px;width:30%;"><div style="background:#fca5a5;border-radius:4px;height:16px;width:${barW}%;min-width:4px;"></div> ${pct}%</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // ── 不一致数据明细表 ──
+    const showRows = inconsistentRows.slice(0, 100);
+    html += '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:#f5f3ff;">';
+    html += '<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:40px;">行号</th>';
+    html += `<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:70px;">一致率</th>`;
+    dim.markCols.forEach(mc => {
+      html += `<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:100px;">标注者${mc.idx}</th>`;
+    });
+    dim.noteCols.forEach(nc => {
+      html += `<th style="padding:8px 6px;text-align:left;border-bottom:2px solid #e5e7eb;min-width:150px;">备注${nc.idx}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    showRows.forEach(({ row, rowIdx, rate }) => {
+      // 收集各标注者的值，高亮不一致的
+      const marks = dim.markCols.map(mc => {
+        const v = row[mc.col];
+        return v !== null && v !== undefined ? String(v).trim() : '';
+      });
+      const majority = getMajority(marks);
+
+      html += `<tr style="border-bottom:1px solid #f3f4f6;">`;
+      html += `<td style="padding:6px;text-align:center;color:#6b7280;">${rowIdx + 2}</td>`;
+      html += `<td style="padding:6px;text-align:center;font-weight:600;color:${rate < 50 ? '#dc2626' : '#d97706'};">${typeof rate === 'number' ? rate.toFixed(1) + '%' : escapeHtml(String(row[rateCol]))}</td>`;
+
+      dim.markCols.forEach((mc, i) => {
+        const v = marks[i];
+        const isDiff = v !== '' && v !== majority;
+        const style = isDiff ? 'background:#fef2f2;color:#dc2626;font-weight:600;' : '';
+        html += `<td style="padding:6px;text-align:center;${style}">${escapeHtml(v)}</td>`;
+      });
+      dim.noteCols.forEach(nc => {
+        const v = row[nc.col];
+        const note = v !== null && v !== undefined ? String(v).trim() : '';
+        html += `<td style="padding:6px;font-size:11px;color:#4b5563;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(note)}">${escapeHtml(note || '—')}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    if (inconsistentRows.length > 100) {
+      html += `<p style="font-size:12px;color:#9ca3af;margin-top:8px;">仅展示前 100 条，共 ${inconsistentRows.length} 条不一致数据</p>`;
+    }
+    html += '</div>';
+  });
+
+  document.getElementById('agreeResultContent').innerHTML = html;
+
+  // 更新维度检测提示
+  const dimHint = document.getElementById('agreeDimensions');
+  dimHint.innerHTML = `<div style="font-size:13px;color:#059669;">✅ 检测到 <strong>${dimNames.length}</strong> 个维度：${dimNames.map(d => '<code style="background:#ede9fe;padding:2px 6px;border-radius:4px;color:#5b21b6;">' + escapeHtml(d) + '</code>').join('、')}</div>`;
+}
+
+// 找多数值（众数）
+function getMajority(arr) {
+  const freq = {};
+  arr.forEach(v => { if (v !== '') { freq[v] = (freq[v] || 0) + 1; } });
+  let max = 0, majority = '';
+  Object.entries(freq).forEach(([v, c]) => { if (c > max) { max = c; majority = v; } });
+  return majority;
 }
 </script>
 </body>
