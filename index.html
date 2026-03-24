@@ -344,12 +344,19 @@ canvas { width: 100% !important; max-height: 300px; }
   <div class="tab-page" id="tab-agreement">
   <div class="card hidden" id="agreeCard">
     <h2>🔍 多人拟合一致性分析</h2>
-    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">自动检测 <code>*_组件拟合一致率</code> 和 <code>*_mark_N</code> 列，分析多人标注的不一致数据</p>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">选择要分析的列（支持一致率列、标注列、备注列），系统将自动按维度分组分析</p>
     <div class="toolbar">
       <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
-      <button class="btn btn-outline" onclick="analyzeAgreement()">开始分析</button>
+      <button class="btn btn-outline" onclick="analyzeAgreement()">分析选中列</button>
+      <button class="btn btn-outline" onclick="agreeAutoSelect()">自动选择拟合列</button>
+      <button class="btn btn-outline" onclick="agreeSelectAll()">全选列</button>
+      <button class="btn btn-outline" onclick="agreeDeselectAll()">清空选择</button>
       <div class="info" id="agreeDataInfo"></div>
     </div>
+    <div style="margin-bottom:12px;">
+      <strong style="font-size:13px;color:#6b7280;">点击列名选择要分析的列：</strong>
+    </div>
+    <div class="col-selector" id="agreeColSelector"></div>
     <div id="agreeDimensions" style="margin-top:12px;"></div>
   </div>
   <div class="card hidden" id="agreeResultCard">
@@ -388,6 +395,7 @@ let selectedCols = new Set();
 let deleteMode = false;
 let deleteCols = new Set();
 let subjSelectedCols = new Set();
+let agreeSelectedCols = new Set();
 let originalFileExt = 'csv';
 let originalFileName = 'data';
 
@@ -627,11 +635,12 @@ function loadData(headers, data) {
   renderManageColSelector();
   renderTable();
   renderManageTable();
+  renderAgreeColSelector();
   renderAgreeDimensions();
 }
 
 function resetAll() {
-  rawData = []; columns = []; selectedCols.clear(); subjSelectedCols.clear();
+  rawData = []; columns = []; selectedCols.clear(); subjSelectedCols.clear(); agreeSelectedCols.clear();
   deleteMode = false; deleteCols.clear();
   fileInput.value = '';
   document.getElementById('uploadCard').classList.remove('hidden');
@@ -2249,10 +2258,25 @@ function detectAgreementDimensions() {
 }
 
 function analyzeAgreement() {
+  if (agreeSelectedCols.size === 0) {
+    alert('请先选择要分析的列，或点击「自动选择拟合列」');
+    return;
+  }
   const { dims, overallRate } = detectAgreementDimensions();
-  const dimNames = Object.keys(dims);
+  // 只保留选中列涉及的维度
+  const filteredDims = {};
+  Object.entries(dims).forEach(([dimName, dim]) => {
+    const sRate = dim.rateCols.filter(c => agreeSelectedCols.has(c));
+    const sMark = dim.markCols.filter(mc => agreeSelectedCols.has(mc.col));
+    const sNote = dim.noteCols.filter(nc => agreeSelectedCols.has(nc.col));
+    if (sRate.length || sMark.length) {
+      filteredDims[dimName] = { rateCols: sRate, markCols: sMark, noteCols: sNote };
+    }
+  });
+  const selOverall = overallRate && agreeSelectedCols.has(overallRate) ? overallRate : null;
+  const dimNames = Object.keys(filteredDims);
   if (dimNames.length === 0) {
-    alert('未检测到多人拟合列。\n请确保列名包含 "*_组件拟合一致率" 和 "*_mark_N" 格式。');
+    alert('选中的列中未检测到拟合维度。\n请确保选中了 "*_组件拟合一致率" 和 "*_mark_N" 格式的列。');
     return;
   }
   document.getElementById('agreeResultCard').classList.remove('hidden');
@@ -2264,8 +2288,8 @@ function analyzeAgreement() {
   html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
 
   // 整体一致率
-  if (overallRate) {
-    const vals = rawData.map(r => r[overallRate]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+  if (selOverall) {
+    const vals = rawData.map(r => r[selOverall]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
     const full = vals.filter(v => parseFloat(String(v)) === 100 || String(v).trim() === '100.00%' || String(v).trim() === '100%').length;
     const pct = vals.length ? (full / vals.length * 100).toFixed(1) : '0.0';
     html += `<div style="background:#fff;border-radius:10px;padding:14px 20px;min-width:160px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
@@ -2276,16 +2300,28 @@ function analyzeAgreement() {
 
   // 各维度概览
   dimNames.forEach(dimName => {
-    const dim = dims[dimName];
+    const dim = filteredDims[dimName];
     const rateCol = dim.rateCols[0];
-    if (!rateCol) return;
-    const vals = rawData.map(r => r[rateCol]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
-    const full = vals.filter(v => {
-      const n = parseFloat(String(v));
-      return n === 100 || String(v).trim() === '100.00%' || String(v).trim() === '100%';
-    }).length;
-    const inconsistent = vals.length - full;
-    const pct = vals.length ? (full / vals.length * 100).toFixed(1) : '0.0';
+    let full, inconsistent, pct;
+    if (rateCol) {
+      const vals = rawData.map(r => r[rateCol]).filter(v => v !== null && v !== undefined && String(v).trim() !== '');
+      full = vals.filter(v => {
+        const n = parseFloat(String(v));
+        return n === 100 || String(v).trim() === '100.00%' || String(v).trim() === '100%';
+      }).length;
+      inconsistent = vals.length - full;
+      pct = vals.length ? (full / vals.length * 100).toFixed(1) : '0.0';
+    } else {
+      // 无一致率列，通过比较 mark 值计算
+      let total = 0;
+      inconsistent = 0;
+      rawData.forEach(row => {
+        const marks = dim.markCols.map(mc => { const v = row[mc.col]; return v !== null && v !== undefined ? String(v).trim() : ''; }).filter(v => v !== '');
+        if (marks.length >= 2) { total++; if (new Set(marks).size > 1) inconsistent++; }
+      });
+      full = total - inconsistent;
+      pct = total ? (full / total * 100).toFixed(1) : '0.0';
+    }
     html += `<div style="background:#fff;border-radius:10px;padding:14px 20px;min-width:160px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
       <div style="font-size:12px;color:#6b7280;">${escapeHtml(dimName)}</div>
       <div style="font-size:28px;font-weight:700;color:${parseFloat(pct) >= 90 ? '#059669' : parseFloat(pct) >= 70 ? '#d97706' : '#dc2626'};">${pct}%</div>
@@ -2295,9 +2331,9 @@ function analyzeAgreement() {
 
   // 各维度详细分析
   dimNames.forEach(dimName => {
-    const dim = dims[dimName];
+    const dim = filteredDims[dimName];
     const rateCol = dim.rateCols[0];
-    if (!rateCol || dim.markCols.length === 0) return;
+    if (dim.markCols.length === 0) return;
 
     html += `<div style="margin-bottom:32px;">`;
     html += `<h3 style="font-size:16px;color:#5b21b6;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #ede9fe;">🔍 ${escapeHtml(dimName)} — 不一致数据详情</h3>`;
@@ -2305,11 +2341,23 @@ function analyzeAgreement() {
     // 筛选不一致行
     const inconsistentRows = [];
     rawData.forEach((row, rowIdx) => {
-      const rateVal = row[rateCol];
-      if (rateVal === null || rateVal === undefined || String(rateVal).trim() === '') return;
-      const rate = parseFloat(String(rateVal));
-      if (rate < 100 && String(rateVal).trim() !== '100%' && String(rateVal).trim() !== '100.00%') {
-        inconsistentRows.push({ row, rowIdx, rate });
+      if (rateCol) {
+        // 有一致率列：按一致率筛选
+        const rateVal = row[rateCol];
+        if (rateVal === null || rateVal === undefined || String(rateVal).trim() === '') return;
+        const rate = parseFloat(String(rateVal));
+        if (rate < 100 && String(rateVal).trim() !== '100%' && String(rateVal).trim() !== '100.00%') {
+          inconsistentRows.push({ row, rowIdx, rate });
+        }
+      } else {
+        // 无一致率列：直接比较各标注者的值
+        const marks = dim.markCols.map(mc => {
+          const v = row[mc.col];
+          return v !== null && v !== undefined ? String(v).trim() : '';
+        }).filter(v => v !== '');
+        if (marks.length >= 2 && new Set(marks).size > 1) {
+          inconsistentRows.push({ row, rowIdx, rate: null });
+        }
       }
     });
 
@@ -2360,7 +2408,7 @@ function analyzeAgreement() {
     html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
     html += '<thead><tr style="background:#f5f3ff;">';
     html += '<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:40px;">行号</th>';
-    html += `<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:70px;">一致率</th>`;
+    if (rateCol) html += `<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:70px;">一致率</th>`;
     dim.markCols.forEach(mc => {
       html += `<th style="padding:8px 6px;text-align:center;border-bottom:2px solid #e5e7eb;min-width:100px;">标注者${mc.idx}</th>`;
     });
@@ -2379,7 +2427,9 @@ function analyzeAgreement() {
 
       html += `<tr style="border-bottom:1px solid #f3f4f6;">`;
       html += `<td style="padding:6px;text-align:center;color:#6b7280;">${rowIdx + 2}</td>`;
-      html += `<td style="padding:6px;text-align:center;font-weight:600;color:${rate < 50 ? '#dc2626' : '#d97706'};">${typeof rate === 'number' ? rate.toFixed(1) + '%' : escapeHtml(String(row[rateCol]))}</td>`;
+      if (rateCol) {
+        html += `<td style="padding:6px;text-align:center;font-weight:600;color:${rate !== null && rate < 50 ? '#dc2626' : '#d97706'};">${typeof rate === 'number' ? rate.toFixed(1) + '%' : escapeHtml(String(row[rateCol] || ''))}</td>`;
+      }
 
       dim.markCols.forEach((mc, i) => {
         const v = marks[i];
@@ -2407,36 +2457,89 @@ function analyzeAgreement() {
   renderAgreeDimensions();
 }
 
-// 渲染维度检测结果（展示所有检测到的列）
+// 拟合分析：列选择器
+function renderAgreeColSelector() {
+  const wrap = document.getElementById('agreeColSelector');
+  if (!wrap) return;
+  let html = '';
+  columns.forEach((col, idx) => {
+    if (/^__EMPTY/.test(col)) return;
+    if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
+    const active = agreeSelectedCols.has(col) ? ' active' : '';
+    // 标记列类型
+    let badge = '其他';
+    let badgeColor = '';
+    if (/组件拟合一致率$/.test(col) || col === '标注拟合一致率') { badge = '一致率'; badgeColor = 'background:#dbeafe;color:#1e40af;'; }
+    else if (/_mark_\d+_备注$/.test(col)) { badge = '备注'; badgeColor = 'background:#fef9c3;color:#854d0e;'; }
+    else if (/_mark_\d+$/.test(col)) { badge = '标注'; badgeColor = 'background:#dcfce7;color:#166534;'; }
+    html += `<div class="col-chip${active}" data-agree-idx="${idx}">${escapeHtml(col)} <span class="type-badge" style="${badgeColor}">${badge}</span></div>`;
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.col-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const idx = parseInt(chip.dataset.agreeIdx);
+      const col = columns[idx];
+      if (agreeSelectedCols.has(col)) { agreeSelectedCols.delete(col); chip.classList.remove('active'); }
+      else { agreeSelectedCols.add(col); chip.classList.add('active'); }
+      renderAgreeDimensions();
+    });
+  });
+}
+
+function agreeAutoSelect() {
+  agreeSelectedCols.clear();
+  columns.forEach(col => {
+    if (/组件拟合一致率$/.test(col) || col === '标注拟合一致率' || /_mark_\d+$/.test(col) || /_mark_\d+_备注$/.test(col)) {
+      agreeSelectedCols.add(col);
+    }
+  });
+  renderAgreeColSelector();
+  renderAgreeDimensions();
+}
+
+function agreeSelectAll() {
+  agreeSelectedCols.clear();
+  columns.forEach(col => {
+    if (/^__EMPTY/.test(col)) return;
+    if (rawData.every(r => { const v = r[col]; return v === null || v === undefined || String(v).trim() === ''; })) return;
+    agreeSelectedCols.add(col);
+  });
+  renderAgreeColSelector();
+  renderAgreeDimensions();
+}
+
+function agreeDeselectAll() {
+  agreeSelectedCols.clear();
+  renderAgreeColSelector();
+  renderAgreeDimensions();
+}
+
+// 渲染维度检测结果（基于选中列）
 function renderAgreeDimensions() {
   const { dims, overallRate } = detectAgreementDimensions();
   const dimNames = Object.keys(dims);
   const wrap = document.getElementById('agreeDimensions');
-  if (dimNames.length === 0) {
-    wrap.innerHTML = '<div style="font-size:13px;color:#9ca3af;margin-top:8px;">未检测到多人拟合列（需包含 *_组件拟合一致率 和 *_mark_N 格式的列名）</div>';
+  const selectedCount = agreeSelectedCols.size;
+  if (selectedCount === 0) {
+    wrap.innerHTML = '<div style="font-size:13px;color:#9ca3af;margin-top:8px;">请选择要分析的列，或点击「自动选择拟合列」快速选择</div>';
     return;
   }
-  let html = `<div style="font-size:13px;color:#059669;margin-bottom:12px;">✅ 检测到 <strong>${dimNames.length}</strong> 个维度</div>`;
-  if (overallRate) {
-    html += `<div style="margin-bottom:8px;"><code style="background:#fef3c7;padding:3px 8px;border-radius:4px;color:#92400e;font-size:12px;">整体一致率列：${escapeHtml(overallRate)}</code></div>`;
-  }
-  html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+  // 从选中列中筛选出拟合维度
+  const selectedDims = {};
   dimNames.forEach(dimName => {
     const dim = dims[dimName];
-    html += `<div style="background:#f5f3ff;border-radius:10px;padding:12px 16px;">`;
-    html += `<div style="font-weight:600;color:#5b21b6;margin-bottom:6px;">📌 ${escapeHtml(dimName)}</div>`;
-    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;">';
-    dim.rateCols.forEach(c => {
-      html += `<span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:4px;">📊 ${escapeHtml(c)}</span>`;
-    });
-    dim.markCols.forEach(mc => {
-      html += `<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:4px;">✏️ ${escapeHtml(mc.col)}</span>`;
-    });
-    dim.noteCols.forEach(nc => {
-      html += `<span style="background:#fef9c3;color:#854d0e;padding:3px 8px;border-radius:4px;">📝 ${escapeHtml(nc.col)}</span>`;
-    });
-    html += '</div></div>';
+    const sRate = dim.rateCols.filter(c => agreeSelectedCols.has(c));
+    const sMark = dim.markCols.filter(mc => agreeSelectedCols.has(mc.col));
+    const sNote = dim.noteCols.filter(nc => agreeSelectedCols.has(nc.col));
+    if (sRate.length || sMark.length) {
+      selectedDims[dimName] = { rateCols: sRate, markCols: sMark, noteCols: sNote };
+    }
   });
+  const selDimNames = Object.keys(selectedDims);
+  let html = `<div style="font-size:13px;color:#059669;margin-top:8px;">已选 <strong>${selectedCount}</strong> 列`;
+  if (selDimNames.length > 0) {
+    html += `，识别出 <strong>${selDimNames.length}</strong> 个拟合维度：${selDimNames.map(d => '<code style="background:#ede9fe;padding:2px 6px;border-radius:4px;color:#5b21b6;">' + escapeHtml(d) + '</code>').join('、')}`;
+  }
   html += '</div>';
   wrap.innerHTML = html;
 }
