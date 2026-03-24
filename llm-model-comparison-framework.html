@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM 多模型对比评估框架</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa;
+    color: #2c3e50;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    padding: 48px;
+  }
+
+  h1 { text-align: center; font-size: 28px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+  .page-sub { text-align: center; font-size: 14px; color: #888; margin-bottom: 36px; letter-spacing: 1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.6; margin-bottom: 40px; }
+
+  thead th {
+    background: #1a1a2e; color: #fff; padding: 12px 10px; text-align: left;
+    font-weight: 600; font-size: 13px; letter-spacing: 1px; position: sticky; top: 0; z-index: 10;
+  }
+  thead th:first-child { border-radius: 8px 0 0 0; }
+  thead th:last-child { border-radius: 0 8px 0 0; }
+
+  tbody td { padding: 8px 10px; border-bottom: 1px solid #eef0f4; vertical-align: top; }
+  tbody tr:hover { background: #fafbfe; }
+
+  td[contenteditable="true"]:focus { outline: 2px solid #3498db; outline-offset: -2px; background: #f0f8ff; }
+
+  .dim-0 { background: #2c3e50; color: #fff; font-weight: 700; font-size: 15px; letter-spacing: 2px; text-align: center; padding: 14px; }
+  .dim-1 { background: #f0f4ff; font-weight: 700; color: #2b5bb5; font-size: 13px; }
+  .dim-2 { background: #f8f9fc; font-weight: 600; color: #444; }
+
+  .c1 td:first-child, .c1 .dim-1 { border-left: 4px solid #3498db; }
+  .c2 td:first-child, .c2 .dim-1 { border-left: 4px solid #9b59b6; }
+  .c3 td:first-child, .c3 .dim-1 { border-left: 4px solid #e74c3c; }
+  .c4 td:first-child, .c4 .dim-1 { border-left: 4px solid #e67e22; }
+  .c5 td:first-child, .c5 .dim-1 { border-left: 4px solid #1abc9c; }
+  .c6 td:first-child, .c6 .dim-1 { border-left: 4px solid #2ecc71; }
+  .c7 td:first-child, .c7 .dim-1 { border-left: 4px solid #f39c12; }
+  .c8 td:first-child, .c8 .dim-1 { border-left: 4px solid #e91e63; }
+
+  .bm { font-weight: 600; color: #2b5bb5; }
+  .note { color: #888; font-size: 12px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin: 1px; }
+  .tag-q { background: #e8f5e9; color: #2e7d32; }
+  .tag-p { background: #fff3e0; color: #e65100; }
+  .tag-c { background: #e3f2fd; color: #1565c0; }
+  .tag-s { background: #fce4ec; color: #c62828; }
+
+  .toolbar { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 20px; }
+  .toolbar button {
+    padding: 8px 20px; border: 1px solid #ddd; border-radius: 6px; background: #fff;
+    color: #333; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .toolbar button:hover { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+  .summary-box {
+    margin-top: 32px; padding: 20px 24px; background: #f8f9fb; border-radius: 8px;
+    display: flex; gap: 40px; flex-wrap: wrap;
+  }
+  .summary-item { display: flex; flex-direction: column; }
+  .summary-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .summary-value { font-size: 24px; font-weight: 700; color: #1a1a2e; }
+
+  h2 { font-size: 20px; color: #1a1a2e; margin: 40px 0 16px; padding-left: 12px; border-left: 4px solid #3498db; }
+  h2.section-perf { border-left-color: #9b59b6; }
+  h2.section-cost { border-left-color: #e74c3c; }
+  h2.section-output { border-left-color: #e67e22; }
+  h2.section-eco { border-left-color: #1abc9c; }
+  h2.section-safe { border-left-color: #2ecc71; }
+  h2.section-special { border-left-color: #f39c12; }
+  h2.section-cap { border-left-color: #e91e63; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .container { box-shadow: none; padding: 20px; }
+    thead th { position: static; }
+    .no-print { display: none; }
+    table { font-size: 11px; }
+    h2 { page-break-before: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>LLM 多模型对比评估框架（完整版）</h1>
+<p class="page-sub">8 大对比板块 · 42 个二级维度 · 130+ 个三级指标 &nbsp;|&nbsp; 双击单元格可编辑 &nbsp;|&nbsp; 适用于 GPT-4 / Claude / Gemini / Llama / Qwen / DeepSeek 等主流模型横评</p>
+
+<div class="toolbar no-print">
+  <button onclick="window.print()">导出 PDF / 打印</button>
+  <button onclick="exportCSV()">导出 CSV</button>
+</div>
+
+<!-- ============================================================ -->
+<h2>板块一：模型基础规格</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">数据来源</th><th style="width:20%">对比意义</th></tr></thead>
+<tbody>
+<tr class="c1"><td class="dim-1" rowspan="5" contenteditable="true">1.1 架构与参数</td><td contenteditable="true">模型参数量（总量 / 激活量）</td><td contenteditable="true">Dense 模型看总参数；MoE 模型区分总量 vs 每次激活量（如 Mixtral 8x7B 总量 46.7B，激活 12.9B）</td><td contenteditable="true">官方技术报告 / Model Card</td><td contenteditable="true">影响模型能力上限和推理成本</td></tr>
+<tr class="c1"><td contenteditable="true">架构类型</td><td contenteditable="true">Dense Transformer / MoE / SSM (Mamba) / 混合架构</td><td contenteditable="true">官方论文</td><td contenteditable="true">决定推理效率和扩展特性</td></tr>
+<tr class="c1"><td contenteditable="true">注意力机制</td><td contenteditable="true">Multi-Head / GQA / MQA / Sliding Window / Linear Attention</td><td contenteditable="true">架构文档</td><td contenteditable="true">影响长文本效率和KV Cache大小</td></tr>
+<tr class="c1"><td contenteditable="true">位置编码</td><td contenteditable="true">RoPE / ALiBi / YaRN / NTK-aware 等，决定上下文外推能力</td><td contenteditable="true">架构文档</td><td contenteditable="true">影响长上下文性能衰减</td></tr>
+<tr class="c1"><td contenteditable="true">词表大小 / Tokenizer</td><td contenteditable="true">BPE / SentencePiece / Tiktoken，词表大小（32K-150K+），中文 token 效率</td><td contenteditable="true">Tokenizer 文档</td><td contenteditable="true">影响多语言效率和成本</td></tr>
+
+<tr class="c1"><td class="dim-1" rowspan="4" contenteditable="true">1.2 训练信息</td><td contenteditable="true">训练数据规模</td><td contenteditable="true">预训练 token 数（如 Llama 3: 15T tokens），训练数据质量和多样性</td><td contenteditable="true">技术报告</td><td contenteditable="true">数据规模和质量是能力基础</td></tr>
+<tr class="c1"><td contenteditable="true">知识截止日期</td><td contenteditable="true">训练数据的时间边界，直接影响模型对最新事件的认知</td><td contenteditable="true">官方说明</td><td contenteditable="true">时效性敏感场景必须关注</td></tr>
+<tr class="c1"><td contenteditable="true">对齐训练方法</td><td contenteditable="true">SFT / RLHF / DPO / KTO / Constitutional AI / RLAIF 等</td><td contenteditable="true">技术报告</td><td contenteditable="true">影响安全性和输出风格</td></tr>
+<tr class="c1"><td contenteditable="true">训练计算量 (FLOPs)</td><td contenteditable="true">预训练总算力消耗，衡量 Scaling Law 位置</td><td contenteditable="true">技术报告（部分不公开）</td><td contenteditable="true">算力 vs 性能的效率</td></tr>
+
+<tr class="c1"><td class="dim-1" rowspan="5" contenteditable="true">1.3 上下文与模态</td><td contenteditable="true">标准上下文窗口</td><td contenteditable="true">默认支持的 context length（4K / 8K / 32K / 128K / 200K / 1M+）</td><td contenteditable="true">官方文档</td><td contenteditable="true">决定可处理的文本长度</td></tr>
+<tr class="c1"><td contenteditable="true">最大扩展上下文</td><td contenteditable="true">通过技术手段可扩展到的最长上下文</td><td contenteditable="true">官方文档</td><td contenteditable="true">长文档/代码库场景</td></tr>
+<tr class="c1"><td contenteditable="true">有效上下文长度</td><td contenteditable="true">实际性能不显著衰减的上下文范围（NIAH 测试）</td><td contenteditable="true">独立评测</td><td contenteditable="true">标称 vs 实际往往有差距</td></tr>
+<tr class="c1"><td contenteditable="true">支持输入模态</td><td contenteditable="true">文本 / 图像 / 音频 / 视频 / 文件（PDF等）</td><td contenteditable="true">官方文档</td><td contenteditable="true">多模态场景覆盖</td></tr>
+<tr class="c1"><td contenteditable="true">支持输出模态</td><td contenteditable="true">文本 / 图像生成 / 音频生成 / 结构化数据</td><td contenteditable="true">官方文档</td><td contenteditable="true">生成能力广度</td></tr>
+
+<tr class="c1"><td class="dim-1" rowspan="4" contenteditable="true">1.4 开放性与许可</td><td contenteditable="true">开源 / 闭源 / 半开放</td><td contenteditable="true">完全开源（权重+代码+数据）/ 仅开放权重 / 完全闭源 API</td><td contenteditable="true">官方发布</td><td contenteditable="true">可定制性和数据安全</td></tr>
+<tr class="c1"><td contenteditable="true">许可证类型</td><td contenteditable="true">Apache 2.0 / MIT / Llama License / 商用限制 / 仅研究用途</td><td contenteditable="true">LICENSE 文件</td><td contenteditable="true">商业落地合规性</td></tr>
+<tr class="c1"><td contenteditable="true">模型系列 / 变体</td><td contenteditable="true">同系列的不同规格（如 7B/13B/70B/405B），不同版本（Base/Chat/Instruct）</td><td contenteditable="true">官方发布</td><td contenteditable="true">按需选择合适规格</td></tr>
+<tr class="c1"><td contenteditable="true">量化版本支持</td><td contenteditable="true">是否提供 INT8/INT4/GPTQ/AWQ/GGUF 等量化版</td><td contenteditable="true">社区 / 官方</td><td contenteditable="true">边缘部署和降本</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-perf">板块二：性能与效率</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">测量方法</th><th style="width:20%">对比意义</th></tr></thead>
+<tbody>
+<tr class="c2"><td class="dim-1" rowspan="5" contenteditable="true">2.1 推理速度</td><td contenteditable="true">首 Token 延迟 (TTFT)</td><td contenteditable="true">从请求发出到收到第一个 token 的时间（ms），用户感知的"响应速度"</td><td contenteditable="true">API 测量 / 本地 benchmark</td><td contenteditable="true">交互体验的核心指标</td></tr>
+<tr class="c2"><td contenteditable="true">输出速度 (TPS / Tokens per second)</td><td contenteditable="true">每秒生成的 token 数，影响长文本生成耗时</td><td contenteditable="true">API 测量</td><td contenteditable="true">批量处理和实时场景</td></tr>
+<tr class="c2"><td contenteditable="true">端到端延迟 (E2E Latency)</td><td contenteditable="true">从请求到完整响应的总时间，含排队、计算、网络</td><td contenteditable="true">客户端计时</td><td contenteditable="true">综合体验</td></tr>
+<tr class="c2"><td contenteditable="true">流式输出延迟</td><td contenteditable="true">Streaming 模式下 token 间的间隔是否均匀，有无卡顿</td><td contenteditable="true">流式 API 监测</td><td contenteditable="true">实时对话流畅度</td></tr>
+<tr class="c2"><td contenteditable="true">Prefill 速度 vs Decode 速度</td><td contenteditable="true">输入处理速度（Prefill）和生成速度（Decode）的分别测量</td><td contenteditable="true">推理引擎日志</td><td contenteditable="true">长输入 vs 长输出场景取舍</td></tr>
+
+<tr class="c2"><td class="dim-1" rowspan="4" contenteditable="true">2.2 吞吐与并发</td><td contenteditable="true">最大并发请求数</td><td contenteditable="true">API 同时处理的请求数上限 / Rate Limit (RPM/TPM)</td><td contenteditable="true">API 文档 / 压测</td><td contenteditable="true">高并发业务场景</td></tr>
+<tr class="c2"><td contenteditable="true">批处理吞吐量</td><td contenteditable="true">单位时间内处理的总 token 数（Batch API 场景）</td><td contenteditable="true">Batch API 测试</td><td contenteditable="true">离线大规模处理</td></tr>
+<tr class="c2"><td contenteditable="true">高负载下的性能衰减</td><td contenteditable="true">并发增加时延迟和质量是否显著下降</td><td contenteditable="true">压力测试</td><td contenteditable="true">生产环境稳定性</td></tr>
+<tr class="c2"><td contenteditable="true">API 可用性 / SLA</td><td contenteditable="true">服务正常运行时间比例（99.9% / 99.99%），故障频率</td><td contenteditable="true">监控平台</td><td contenteditable="true">生产环境可靠性</td></tr>
+
+<tr class="c2"><td class="dim-1" rowspan="3" contenteditable="true">2.3 资源消耗</td><td contenteditable="true">GPU 显存需求</td><td contenteditable="true">不同精度（FP16/INT8/INT4）下的推理显存占用</td><td contenteditable="true">推理引擎监测</td><td contenteditable="true">自托管硬件选型</td></tr>
+<tr class="c2"><td contenteditable="true">推理能耗 (Watt/token)</td><td contenteditable="true">每生成一个 token 的功耗</td><td contenteditable="true">硬件监测</td><td contenteditable="true">绿色 AI 和运营成本</td></tr>
+<tr class="c2"><td contenteditable="true">KV Cache 大小</td><td contenteditable="true">长上下文时 KV Cache 的显存占用增长</td><td contenteditable="true">推理引擎日志</td><td contenteditable="true">长上下文的实际可行性</td></tr>
+
+<tr class="c2"><td class="dim-1" rowspan="3" contenteditable="true">2.4 长上下文性能</td><td contenteditable="true">性能随长度衰减曲线</td><td contenteditable="true">上下文从 4K→128K 时，各任务准确率的变化曲线</td><td contenteditable="true">NIAH / LongBench</td><td contenteditable="true">标称窗口 vs 有效窗口</td></tr>
+<tr class="c2"><td contenteditable="true">大海捞针准确率 (NIAH)</td><td contenteditable="true">在不同深度和长度下定位关键信息的成功率</td><td contenteditable="true">NIAH 测试</td><td contenteditable="true">信息检索完整性</td></tr>
+<tr class="c2"><td contenteditable="true">长文本推理质量</td><td contenteditable="true">长上下文下推理、摘要、分析的质量是否保持</td><td contenteditable="true">LongBench / L-Eval</td><td contenteditable="true">实际长文档处理效果</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-cost">板块三：成本与经济性</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">计算方式</th><th style="width:20%">对比意义</th></tr></thead>
+<tbody>
+<tr class="c3"><td class="dim-1" rowspan="4" contenteditable="true">3.1 API 定价</td><td contenteditable="true">输入价格（$/M tokens）</td><td contenteditable="true">每百万输入 token 的价格，不同模型差异可达 10-100 倍</td><td contenteditable="true">官方定价页</td><td contenteditable="true">成本核算基础</td></tr>
+<tr class="c3"><td contenteditable="true">输出价格（$/M tokens）</td><td contenteditable="true">每百万输出 token 的价格，通常为输入的 2-5 倍</td><td contenteditable="true">官方定价页</td><td contenteditable="true">生成密集型任务成本</td></tr>
+<tr class="c3"><td contenteditable="true">缓存/批处理价格</td><td contenteditable="true">Prompt Caching 折扣 / Batch API 折扣（通常 50% off）</td><td contenteditable="true">官方定价页</td><td contenteditable="true">重复前缀场景降本</td></tr>
+<tr class="c3"><td contenteditable="true">图像/音频/视频定价</td><td contenteditable="true">多模态输入的额外费用计算方式</td><td contenteditable="true">官方定价页</td><td contenteditable="true">多模态场景成本</td></tr>
+
+<tr class="c3"><td class="dim-1" rowspan="4" contenteditable="true">3.2 性能/成本比</td><td contenteditable="true">单位成本 Benchmark 得分</td><td contenteditable="true">MMLU得分/$、HumanEval得分/$ 等，衡量"每花一块钱买到多少能力"</td><td contenteditable="true">Benchmark 分 ÷ 单次调用成本</td><td contenteditable="true">性价比选型核心指标</td></tr>
+<tr class="c3"><td contenteditable="true">单位成本 Arena ELO</td><td contenteditable="true">ELO 得分 / 每百万 token 成本</td><td contenteditable="true">ELO ÷ 价格</td><td contenteditable="true">综合能力性价比</td></tr>
+<tr class="c3"><td contenteditable="true">任务级成本效率</td><td contenteditable="true">完成特定任务（如翻译1000字、生成测试用例）的实际花费</td><td contenteditable="true">实测任务成本</td><td contenteditable="true">落地场景成本估算</td></tr>
+<tr class="c3"><td contenteditable="true">Token 效率（相同语义的 token 消耗）</td><td contenteditable="true">不同 Tokenizer 对同样内容（尤其是中文）的 token 数差异</td><td contenteditable="true">Tokenizer 编码测试</td><td contenteditable="true">中文场景隐性成本</td></tr>
+
+<tr class="c3"><td class="dim-1" rowspan="3" contenteditable="true">3.3 自托管成本</td><td contenteditable="true">推理硬件需求</td><td contenteditable="true">需要几张什么型号 GPU（A100/H100/L40S 等）</td><td contenteditable="true">推理引擎文档</td><td contenteditable="true">私有化部署选型</td></tr>
+<tr class="c3"><td contenteditable="true">微调成本</td><td contenteditable="true">Fine-tuning 的计算资源和 API 价格</td><td contenteditable="true">官方定价 / 实测</td><td contenteditable="true">定制化场景</td></tr>
+<tr class="c3"><td contenteditable="true">运维成本（人力 + 基础设施）</td><td contenteditable="true">模型部署、监控、更新的持续运维投入</td><td contenteditable="true">运维估算</td><td contenteditable="true">TCO 总拥有成本</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-output">板块四：输出质量特征</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">评估方法</th><th style="width:20%">典型差异示例</th></tr></thead>
+<tbody>
+<tr class="c4"><td class="dim-1" rowspan="5" contenteditable="true">4.1 输出风格</td><td contenteditable="true">默认详细度（简洁 vs 详细）</td><td contenteditable="true">同一问题不同模型的平均回复长度差异</td><td contenteditable="true">统计平均输出 token 数</td><td contenteditable="true">Claude 偏详细，GPT-4 适中</td></tr>
+<tr class="c4"><td contenteditable="true">格式化习惯</td><td contenteditable="true">是否默认使用标题/列表/代码块/表格等结构化格式</td><td contenteditable="true">人工评估输出格式</td><td contenteditable="true">不同模型有明显偏好差异</td></tr>
+<tr class="c4"><td contenteditable="true">语言风格自然度</td><td contenteditable="true">措辞是否自然流畅、有无"AI 味"/"翻译腔"</td><td contenteditable="true">人工打分</td><td contenteditable="true">中文表达差异明显</td></tr>
+<tr class="c4"><td contenteditable="true">创意性 vs 保守性</td><td contenteditable="true">创意写作任务中的想象力和独特性，vs 事实性任务的稳健性</td><td contenteditable="true">人工评估 + Arena Creative</td><td contenteditable="true">创作类 vs 分析类取舍</td></tr>
+<tr class="c4"><td contenteditable="true">多语言输出质量一致性</td><td contenteditable="true">英文 vs 中文 vs 其他语言的输出质量差异程度</td><td contenteditable="true">同一任务多语言对比</td><td contenteditable="true">非英语场景关键指标</td></tr>
+
+<tr class="c4"><td class="dim-1" rowspan="4" contenteditable="true">4.2 准确性特征</td><td contenteditable="true">幻觉率（Hallucination Rate）</td><td contenteditable="true">事实性问答中编造信息的比例</td><td contenteditable="true">HaluEval / TruthfulQA / 人工抽检</td><td contenteditable="true">知识密集型场景生命线</td></tr>
+<tr class="c4"><td contenteditable="true">引用/来源准确性</td><td contenteditable="true">生成的引用、链接、数据来源是否真实可查</td><td contenteditable="true">人工验证</td><td contenteditable="true">学术/法律/医疗场景</td></tr>
+<tr class="c4"><td contenteditable="true">数值计算准确性</td><td contenteditable="true">涉及数字计算时的准确率</td><td contenteditable="true">数学题目测试</td><td contenteditable="true">财务/工程场景</td></tr>
+<tr class="c4"><td contenteditable="true">自我校正能力</td><td contenteditable="true">指出错误后能否有效修正，而非坚持或产生新错误</td><td contenteditable="true">对话式纠错测试</td><td contenteditable="true">交互式工作流</td></tr>
+
+<tr class="c4"><td class="dim-1" rowspan="3" contenteditable="true">4.3 可控性</td><td contenteditable="true">指令遵循精度</td><td contenteditable="true">格式/长度/语言/内容等约束的遵循准确率</td><td contenteditable="true">IFEval / FollowBench</td><td contenteditable="true">结构化输出场景</td></tr>
+<tr class="c4"><td contenteditable="true">Temperature/参数敏感度</td><td contenteditable="true">调整 temperature/top_p 时输出稳定性变化</td><td contenteditable="true">多次采样方差分析</td><td contenteditable="true">可复现性需求</td></tr>
+<tr class="c4"><td contenteditable="true">输出确定性（同一输入多次一致性）</td><td contenteditable="true">temp=0 下重复请求的输出一致率</td><td contenteditable="true">多次采样对比</td><td contenteditable="true">需要确定性输出的场景</td></tr>
+
+<tr class="c4"><td class="dim-1" rowspan="3" contenteditable="true">4.4 拒绝行为</td><td contenteditable="true">合理拒绝率（True Positive）</td><td contenteditable="true">对真正危险/不当请求的正确拒绝比例</td><td contenteditable="true">HarmBench / 安全测试集</td><td contenteditable="true">安全底线</td></tr>
+<tr class="c4"><td contenteditable="true">过度拒绝率（False Positive）</td><td contenteditable="true">对安全合理请求的误拒比例</td><td contenteditable="true">XSTest / OR-Bench</td><td contenteditable="true">可用性 vs 安全性平衡</td></tr>
+<tr class="c4"><td contenteditable="true">拒绝表达方式</td><td contenteditable="true">拒绝时是否给出解释、是否提供替代方案</td><td contenteditable="true">人工评估</td><td contenteditable="true">用户体验</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-eco">板块五：生态与可用性</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">信息来源</th><th style="width:20%">对比意义</th></tr></thead>
+<tbody>
+<tr class="c5"><td class="dim-1" rowspan="5" contenteditable="true">5.1 API 与接入</td><td contenteditable="true">API 兼容性（OpenAI 兼容 / 自定义）</td><td contenteditable="true">是否兼容 OpenAI API 格式，迁移成本如何</td><td contenteditable="true">API 文档</td><td contenteditable="true">切换模型的工程成本</td></tr>
+<tr class="c5"><td contenteditable="true">SDK 支持（Python/JS/Java/Go 等）</td><td contenteditable="true">官方 SDK 覆盖的编程语言及成熟度</td><td contenteditable="true">GitHub / 官方文档</td><td contenteditable="true">开发效率</td></tr>
+<tr class="c5"><td contenteditable="true">流式输出支持 (SSE/WebSocket)</td><td contenteditable="true">是否支持流式输出及其稳定性</td><td contenteditable="true">API 测试</td><td contenteditable="true">实时交互场景</td></tr>
+<tr class="c5"><td contenteditable="true">函数调用 / 工具使用 API</td><td contenteditable="true">Function Calling / Tool Use 的API设计和可靠性</td><td contenteditable="true">API 文档 + BFCL 评测</td><td contenteditable="true">Agent 开发核心</td></tr>
+<tr class="c5"><td contenteditable="true">结构化输出 (JSON Mode / Schema)</td><td contenteditable="true">是否支持约束输出为合法 JSON / 自定义 Schema</td><td contenteditable="true">API 文档</td><td contenteditable="true">数据提取/集成场景</td></tr>
+
+<tr class="c5"><td class="dim-1" rowspan="4" contenteditable="true">5.2 定制化能力</td><td contenteditable="true">微调 (Fine-tuning) 支持</td><td contenteditable="true">SFT / LoRA / QLoRA / 全参数微调的支持程度</td><td contenteditable="true">官方文档</td><td contenteditable="true">垂直领域定制</td></tr>
+<tr class="c5"><td contenteditable="true">System Prompt 有效性</td><td contenteditable="true">System Prompt 对模型行为的控制力和持久度</td><td contenteditable="true">实测</td><td contenteditable="true">角色/业务定制</td></tr>
+<tr class="c5"><td contenteditable="true">RAG 友好度</td><td contenteditable="true">与检索增强生成结合时的效果（引用准确率、上下文利用率）</td><td contenteditable="true">RAG 场景实测</td><td contenteditable="true">知识库场景</td></tr>
+<tr class="c5"><td contenteditable="true">Embedding 模型配套</td><td contenteditable="true">是否提供配套的 Embedding 模型及其质量</td><td contenteditable="true">MTEB 排行榜</td><td contenteditable="true">语义搜索一站式</td></tr>
+
+<tr class="c5"><td class="dim-1" rowspan="4" contenteditable="true">5.3 开发者生态</td><td contenteditable="true">文档质量与完整度</td><td contenteditable="true">API 文档、教程、示例的完善程度</td><td contenteditable="true">官方文档站</td><td contenteditable="true">开发者上手速度</td></tr>
+<tr class="c5"><td contenteditable="true">社区活跃度</td><td contenteditable="true">GitHub Stars、Discord/论坛活跃度、第三方工具数量</td><td contenteditable="true">GitHub / 社区平台</td><td contenteditable="true">问题解决效率</td></tr>
+<tr class="c5"><td contenteditable="true">框架集成（LangChain/LlamaIndex 等）</td><td contenteditable="true">主流 AI 框架的原生支持程度</td><td contenteditable="true">框架文档</td><td contenteditable="true">开发效率</td></tr>
+<tr class="c5"><td contenteditable="true">Playground / 调试工具</td><td contenteditable="true">官方提供的在线试用、调试、Prompt 管理工具</td><td contenteditable="true">官方平台</td><td contenteditable="true">开发调试体验</td></tr>
+
+<tr class="c5"><td class="dim-1" rowspan="3" contenteditable="true">5.4 服务保障</td><td contenteditable="true">区域可用性</td><td contenteditable="true">API 在不同地区的可用性（国内直接访问 / 需代理）</td><td contenteditable="true">实测</td><td contenteditable="true">国内场景关键指标</td></tr>
+<tr class="c5"><td contenteditable="true">版本更新频率与兼容性</td><td contenteditable="true">模型更新迭代频率、API 版本管理、向下兼容策略</td><td contenteditable="true">Changelog</td><td contenteditable="true">生产环境稳定性</td></tr>
+<tr class="c5"><td contenteditable="true">技术支持与 SLA</td><td contenteditable="true">企业级技术支持、SLA 保障、专属实例</td><td contenteditable="true">商务文档</td><td contenteditable="true">企业客户选型</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-safe">板块六：安全与合规</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">评估方法</th><th style="width:20%">对比意义</th></tr></thead>
+<tbody>
+<tr class="c6"><td class="dim-1" rowspan="4" contenteditable="true">6.1 内容安全</td><td contenteditable="true">有害内容生成率</td><td contenteditable="true">对各类有害请求的防御能力</td><td contenteditable="true">HarmBench / ToxiGen</td><td contenteditable="true">安全底线</td></tr>
+<tr class="c6"><td contenteditable="true">越狱攻击抵抗力</td><td contenteditable="true">对主流越狱技术（GCG/AutoDAN/PAIR等）的防御成功率</td><td contenteditable="true">JailbreakBench</td><td contenteditable="true">对抗攻击鲁棒性</td></tr>
+<tr class="c6"><td contenteditable="true">安全 vs 可用 平衡</td><td contenteditable="true">安全限制是否影响正常使用（过度拒绝问题）</td><td contenteditable="true">XSTest + 正常场景测试</td><td contenteditable="true">用户体验</td></tr>
+<tr class="c6"><td contenteditable="true">安全对齐可配置性</td><td contenteditable="true">是否允许企业客户根据场景调整安全等级</td><td contenteditable="true">API 选项 / 企业方案</td><td contenteditable="true">灵活性</td></tr>
+
+<tr class="c6"><td class="dim-1" rowspan="3" contenteditable="true">6.2 偏见与公平</td><td contenteditable="true">群体偏见程度</td><td contenteditable="true">对不同性别/种族/年龄群体的差异化对待</td><td contenteditable="true">BBQ / CrowS-Pairs / BOLD</td><td contenteditable="true">公平性承诺</td></tr>
+<tr class="c6"><td contenteditable="true">文化敏感性</td><td contenteditable="true">对不同文化背景的理解和尊重程度</td><td contenteditable="true">跨文化场景测试</td><td contenteditable="true">国际化产品</td></tr>
+<tr class="c6"><td contenteditable="true">政治敏感内容处理</td><td contenteditable="true">对争议性政治话题的处理策略（回避/中立/拒绝）</td><td contenteditable="true">敏感话题测试</td><td contenteditable="true">不同市场合规</td></tr>
+
+<tr class="c6"><td class="dim-1" rowspan="4" contenteditable="true">6.3 数据隐私</td><td contenteditable="true">数据使用政策</td><td contenteditable="true">用户输入数据是否被用于训练、保留时长</td><td contenteditable="true">服务条款 / DPA</td><td contenteditable="true">数据安全合规</td></tr>
+<tr class="c6"><td contenteditable="true">数据驻留 / 本地部署</td><td contenteditable="true">数据是否留在指定地区、是否支持私有部署</td><td contenteditable="true">部署方案</td><td contenteditable="true">数据主权合规</td></tr>
+<tr class="c6"><td contenteditable="true">PII 泄露风险</td><td contenteditable="true">模型是否可能泄露训练数据中的个人信息</td><td contenteditable="true">Privacy 测试</td><td contenteditable="true">隐私法规合规</td></tr>
+<tr class="c6"><td contenteditable="true">合规认证</td><td contenteditable="true">SOC 2 / GDPR / HIPAA / 等保 / 信创 等认证</td><td contenteditable="true">官方合规文档</td><td contenteditable="true">企业采购必要条件</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-special">板块七：特殊能力差异化</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">二级维度</th><th style="width:16%">三级指标</th><th style="width:30%">说明 / 对比要点</th><th style="width:22%">评估方法</th><th style="width:20%">模型差异举例</th></tr></thead>
+<tbody>
+<tr class="c7"><td class="dim-1" rowspan="3" contenteditable="true">7.1 推理模式</td><td contenteditable="true">是否支持深度思考 / 推理模式</td><td contenteditable="true">o1/o3 思维链模式、Claude extended thinking、DeepSeek-R1 深度推理</td><td contenteditable="true">官方功能文档</td><td contenteditable="true">复杂推理场景</td></tr>
+<tr class="c7"><td contenteditable="true">思考 token 的可见性</td><td contenteditable="true">推理过程是否对用户可见（thinking 标签 / 隐藏思考）</td><td contenteditable="true">API 行为</td><td contenteditable="true">可解释性需求</td></tr>
+<tr class="c7"><td contenteditable="true">推理时间 vs 质量权衡</td><td contenteditable="true">深度推理模式下耗时与质量提升的性价比</td><td contenteditable="true">实测</td><td contenteditable="true">是否值得等更久</td></tr>
+
+<tr class="c7"><td class="dim-1" rowspan="3" contenteditable="true">7.2 Agent 能力</td><td contenteditable="true">自主规划与执行</td><td contenteditable="true">将复杂目标分解为可执行步骤并自主完成的能力</td><td contenteditable="true">AgentBench / SWE-bench</td><td contenteditable="true">Agent 应用核心</td></tr>
+<tr class="c7"><td contenteditable="true">错误恢复与自我反思</td><td contenteditable="true">执行出错后自动诊断、调整方案的能力</td><td contenteditable="true">Agent 任务实测</td><td contenteditable="true">自主性与鲁棒性</td></tr>
+<tr class="c7"><td contenteditable="true">Computer Use / 屏幕操作</td><td contenteditable="true">操作桌面/浏览器的能力（Claude Computer Use / GPT Operator 等）</td><td contenteditable="true">OSWorld / WebArena</td><td contenteditable="true">自动化办公场景</td></tr>
+
+<tr class="c7"><td class="dim-1" rowspan="3" contenteditable="true">7.3 专项能力</td><td contenteditable="true">中文能力特长</td><td contenteditable="true">中文理解/生成/文化知识的对比，国产模型 vs 海外模型差异</td><td contenteditable="true">C-Eval / CMMLU / 中文 Arena</td><td contenteditable="true">中文场景选型</td></tr>
+<tr class="c7"><td contenteditable="true">垂直领域表现</td><td contenteditable="true">在医疗/法律/金融/教育等特定领域的专业表现差异</td><td contenteditable="true">领域专项评测</td><td contenteditable="true">行业落地</td></tr>
+<tr class="c7"><td contenteditable="true">代码能力深度</td><td contenteditable="true">不同模型在代码生成/调试/重构/测试等方面的优劣势</td><td contenteditable="true">HumanEval / SWE-bench / LiveCodeBench</td><td contenteditable="true">开发者工具选型</td></tr>
+
+<tr class="c7"><td class="dim-1" rowspan="3" contenteditable="true">7.4 独有特性</td><td contenteditable="true">记忆 / 个性化</td><td contenteditable="true">跨对话记忆能力（ChatGPT Memory / Claude Projects 等）</td><td contenteditable="true">功能对比</td><td contenteditable="true">个人助手场景</td></tr>
+<tr class="c7"><td contenteditable="true">文件处理能力</td><td contenteditable="true">PDF/Excel/PPT/代码仓库 等文件的解析和处理能力</td><td contenteditable="true">实测</td><td contenteditable="true">办公自动化</td></tr>
+<tr class="c7"><td contenteditable="true">联网搜索 / 实时信息</td><td contenteditable="true">是否集成搜索引擎，获取实时信息的能力</td><td contenteditable="true">实时性问题测试</td><td contenteditable="true">需要最新信息的场景</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 class="section-cap">板块八：核心能力 Benchmark 对比（得分矩阵）</h2>
+<!-- ============================================================ -->
+<table>
+<thead><tr><th style="width:12%">能力维度</th><th style="width:14%">代表 Benchmark</th><th style="width:12%">GPT-4o</th><th style="width:12%">Claude 3.5 Sonnet</th><th style="width:12%">Gemini 1.5 Pro</th><th style="width:12%">Llama 3.1 405B</th><th style="width:12%">Qwen2.5 72B</th><th style="width:14%">DeepSeek-V3</th></tr></thead>
+<tbody>
+<tr><td class="dim-1" contenteditable="true">知识理解</td><td contenteditable="true" class="bm">MMLU</td><td contenteditable="true">88.7%</td><td contenteditable="true">88.7%</td><td contenteditable="true">85.9%</td><td contenteditable="true">88.6%</td><td contenteditable="true">85.3%</td><td contenteditable="true">88.5%</td></tr>
+<tr><td class="dim-1" contenteditable="true">深度知识</td><td contenteditable="true" class="bm">MMLU-PRO</td><td contenteditable="true">~74%</td><td contenteditable="true">~78%</td><td contenteditable="true">~70%</td><td contenteditable="true">~73%</td><td contenteditable="true">~71%</td><td contenteditable="true">~75%</td></tr>
+<tr><td class="dim-1" contenteditable="true">推理</td><td contenteditable="true" class="bm">GPQA Diamond</td><td contenteditable="true">~53%</td><td contenteditable="true">~65%</td><td contenteditable="true">~47%</td><td contenteditable="true">~51%</td><td contenteditable="true">~49%</td><td contenteditable="true">~59%</td></tr>
+<tr><td class="dim-1" contenteditable="true">基础数学</td><td contenteditable="true" class="bm">GSM8K</td><td contenteditable="true">~96%</td><td contenteditable="true">~96%</td><td contenteditable="true">~92%</td><td contenteditable="true">~96%</td><td contenteditable="true">~93%</td><td contenteditable="true">~96%</td></tr>
+<tr><td class="dim-1" contenteditable="true">竞赛数学</td><td contenteditable="true" class="bm">MATH</td><td contenteditable="true">~76%</td><td contenteditable="true">~78%</td><td contenteditable="true">~67%</td><td contenteditable="true">~73%</td><td contenteditable="true">~80%</td><td contenteditable="true">~84%</td></tr>
+<tr><td class="dim-1" contenteditable="true">代码生成</td><td contenteditable="true" class="bm">HumanEval</td><td contenteditable="true">~90%</td><td contenteditable="true">~92%</td><td contenteditable="true">~84%</td><td contenteditable="true">~89%</td><td contenteditable="true">~86%</td><td contenteditable="true">~89%</td></tr>
+<tr><td class="dim-1" contenteditable="true">软件工程</td><td contenteditable="true" class="bm">SWE-bench Verified</td><td contenteditable="true">~38%</td><td contenteditable="true">~49%</td><td contenteditable="true">~28%</td><td contenteditable="true">~20%</td><td contenteditable="true">—</td><td contenteditable="true">~42%</td></tr>
+<tr><td class="dim-1" contenteditable="true">指令遵循</td><td contenteditable="true" class="bm">IFEval</td><td contenteditable="true">~87%</td><td contenteditable="true">~90%</td><td contenteditable="true">~84%</td><td contenteditable="true">~87%</td><td contenteditable="true">~83%</td><td contenteditable="true">~86%</td></tr>
+<tr><td class="dim-1" contenteditable="true">中文知识</td><td contenteditable="true" class="bm">C-Eval / CMMLU</td><td contenteditable="true">—</td><td contenteditable="true">—</td><td contenteditable="true">—</td><td contenteditable="true">—</td><td contenteditable="true">~90%</td><td contenteditable="true">~88%</td></tr>
+<tr><td class="dim-1" contenteditable="true">人类偏好</td><td contenteditable="true" class="bm">Chatbot Arena ELO</td><td contenteditable="true">#1 梯队</td><td contenteditable="true">#1 梯队</td><td contenteditable="true">#1 梯队</td><td contenteditable="true">#2 梯队</td><td contenteditable="true">#2 梯队</td><td contenteditable="true">#1 梯队</td></tr>
+</tbody>
+</table>
+
+<p class="note" style="text-align:center; margin-top:-30px; margin-bottom:30px;">* 以上得分为近似参考值，不同评测条件（few-shot 数、prompt 策略等）会导致差异。所有单元格均可双击编辑，填入你实测的最新数据。</p>
+
+<!-- 统计 -->
+<div class="summary-box">
+  <div class="summary-item"><span class="summary-label">对比板块</span><span class="summary-value">8</span></div>
+  <div class="summary-item"><span class="summary-label">二级维度</span><span class="summary-value">42</span></div>
+  <div class="summary-item"><span class="summary-label">三级指标</span><span class="summary-value">130+</span></div>
+  <div class="summary-item"><span class="summary-label">对比模型（可扩展）</span><span class="summary-value">6</span></div>
+</div>
+
+</div>
+
+<script>
+function exportCSV() {
+  const tables = document.querySelectorAll('table');
+  let csv = [];
+
+  tables.forEach((table, tIdx) => {
+    const h2 = table.previousElementSibling;
+    if (h2 && h2.tagName === 'H2') csv.push('"' + h2.innerText + '"');
+
+    const rows = table.querySelectorAll('tr');
+    let curD1 = '';
+    rows.forEach((row, idx) => {
+      const cells = row.querySelectorAll('th, td');
+      const rowData = [];
+      cells.forEach(cell => {
+        let t = cell.innerText.replace(/"/g, '""').replace(/\n/g, ' ').trim();
+        if (cell.classList.contains('dim-1')) curD1 = t;
+        rowData.push('"' + t + '"');
+      });
+      if (idx > 0 && rowData.length < cells.length + 1) {
+        // fill missing merged cells
+      }
+      csv.push(rowData.join(','));
+    });
+    csv.push('');
+  });
+
+  const csvContent = '\uFEFF' + csv.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'LLM多模型对比评估框架.csv';
+  link.click();
+}
+</script>
+</body>
+</html>
