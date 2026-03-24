@@ -3,534 +3,340 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>大语言模型评估维度全景表（完整细化版）</title>
+<title>LLM 模型评估维度体系（用户视角版）</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   body {
     font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    background: #f5f7fa;
-    color: #2c3e50;
-    padding: 40px 20px;
+    background: #f5f7fa; color: #2c3e50; padding: 40px 20px;
   }
-
   .container {
-    max-width: 1400px;
-    margin: 0 auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    padding: 48px;
+    max-width: 1300px; margin: 0 auto; background: #fff;
+    border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 48px;
   }
+  h1 { text-align: center; font-size: 28px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+  .page-sub { text-align: center; font-size: 14px; color: #888; margin-bottom: 36px; letter-spacing: 1px; }
 
-  h1 {
-    text-align: center;
-    font-size: 28px;
-    font-weight: 700;
-    color: #1a1a2e;
-    margin-bottom: 8px;
-  }
-
-  .page-subtitle {
-    text-align: center;
-    font-size: 14px;
-    color: #888;
-    margin-bottom: 36px;
-    letter-spacing: 1px;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-    line-height: 1.6;
-  }
-
+  table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.7; margin-bottom: 48px; }
   thead th {
-    background: #1a1a2e;
-    color: #fff;
-    padding: 12px 10px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 13px;
-    letter-spacing: 1px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    padding: 12px 10px; text-align: left; font-weight: 600; font-size: 13px;
+    letter-spacing: 1px; position: sticky; top: 0; z-index: 10;
   }
-
   thead th:first-child { border-radius: 8px 0 0 0; }
   thead th:last-child { border-radius: 0 8px 0 0; }
 
-  tbody td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #eef0f4;
-    vertical-align: top;
-  }
-
-  .dim-1 {
-    background: #f0f4ff;
-    font-weight: 700;
-    color: #2b5bb5;
-    font-size: 14px;
-    letter-spacing: 1px;
-  }
-
-  .dim-2 {
-    background: #f8f9fc;
-    font-weight: 600;
-    color: #444;
-  }
-
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #eef0f4; vertical-align: top; }
   tbody tr:hover { background: #fafbfe; }
+  td[contenteditable="true"]:focus { outline: 2px solid #3498db; outline-offset: -2px; background: #f0f8ff; }
 
-  .cat-1 td:first-child, .cat-1 .dim-1, .cat-1 .dim-2 { border-left: 4px solid #3498db; }
-  .cat-2 td:first-child, .cat-2 .dim-1, .cat-2 .dim-2 { border-left: 4px solid #9b59b6; }
-  .cat-3 td:first-child, .cat-3 .dim-1, .cat-3 .dim-2 { border-left: 4px solid #e74c3c; }
-  .cat-4 td:first-child, .cat-4 .dim-1, .cat-4 .dim-2 { border-left: 4px solid #e67e22; }
-  .cat-5 td:first-child, .cat-5 .dim-1, .cat-5 .dim-2 { border-left: 4px solid #1abc9c; }
-  .cat-6 td:first-child, .cat-6 .dim-1, .cat-6 .dim-2 { border-left: 4px solid #2ecc71; }
-  .cat-7 td:first-child, .cat-7 .dim-1, .cat-7 .dim-2 { border-left: 4px solid #f39c12; }
-  .cat-8 td:first-child, .cat-8 .dim-1, .cat-8 .dim-2 { border-left: 4px solid #e91e63; }
-  .cat-9 td:first-child, .cat-9 .dim-1, .cat-9 .dim-2 { border-left: 4px solid #ff5722; }
-  .cat-10 td:first-child, .cat-10 .dim-1, .cat-10 .dim-2 { border-left: 4px solid #607d8b; }
+  .dim-1 { font-weight: 700; font-size: 14px; letter-spacing: 2px; writing-mode: horizontal-tb; }
+  .dim-2 { font-weight: 600; color: #333; font-size: 13px; }
 
-  .bm { font-weight: 600; color: #2b5bb5; }
-  .sc { color: #27ae60; font-weight: 600; }
-  .na { color: #bbb; }
+  /* 各板块配色 */
+  .t1 thead th { background: #d4740e; color: #fff; }
+  .t1 .dim-1 { background: #fef3e2; color: #b85c00; border-left: 4px solid #e8910f; }
+  .t1 .dim-2 { background: #fef9f0; border-left: 4px solid #e8910f; }
+  .t1 td:first-child { border-left: 4px solid #e8910f; }
 
-  td[contenteditable="true"]:focus {
-    outline: 2px solid #3498db;
-    outline-offset: -2px;
-    background: #f0f8ff;
+  .t2 thead th { background: #2b7a4b; color: #fff; }
+  .t2 .dim-1 { background: #e6f5ed; color: #1a5c35; border-left: 4px solid #2b7a4b; }
+  .t2 .dim-2 { background: #f2faf6; border-left: 4px solid #2b7a4b; }
+  .t2 td:first-child { border-left: 4px solid #2b7a4b; }
+
+  .t3 thead th { background: #2b5ea7; color: #fff; }
+  .t3 .dim-1 { background: #e3ecf7; color: #1c3d6e; border-left: 4px solid #2b5ea7; }
+  .t3 .dim-2 { background: #f0f5fc; border-left: 4px solid #2b5ea7; }
+  .t3 td:first-child { border-left: 4px solid #2b5ea7; }
+
+  .t4 thead th { background: #7b2d8e; color: #fff; }
+  .t4 .dim-1 { background: #f3e5f7; color: #5a1d68; border-left: 4px solid #7b2d8e; }
+  .t4 .dim-2 { background: #f9f0fc; border-left: 4px solid #7b2d8e; }
+  .t4 td:first-child { border-left: 4px solid #7b2d8e; }
+
+  .t5 thead th { background: #c0392b; color: #fff; }
+  .t5 .dim-1 { background: #fbe9e7; color: #922b21; border-left: 4px solid #c0392b; }
+  .t5 .dim-2 { background: #fdf3f2; border-left: 4px solid #c0392b; }
+  .t5 td:first-child { border-left: 4px solid #c0392b; }
+
+  .t6 thead th { background: #607d8b; color: #fff; }
+  .t6 .dim-1 { background: #eceff1; color: #37474f; border-left: 4px solid #607d8b; }
+  .t6 .dim-2 { background: #f5f7f8; border-left: 4px solid #607d8b; }
+  .t6 td:first-child { border-left: 4px solid #607d8b; }
+
+  .section-title {
+    font-size: 22px; font-weight: 700; margin: 48px 0 16px; padding: 12px 20px;
+    border-radius: 8px; color: #fff; letter-spacing: 2px;
   }
+  .st1 { background: linear-gradient(135deg, #d4740e, #e8a020); }
+  .st2 { background: linear-gradient(135deg, #2b7a4b, #3da362); }
+  .st3 { background: linear-gradient(135deg, #2b5ea7, #4a8ad4); }
+  .st4 { background: linear-gradient(135deg, #7b2d8e, #a64db8); }
+  .st5 { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+  .st6 { background: linear-gradient(135deg, #607d8b, #90a4ae); }
 
-  .toolbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
+  .toolbar { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 20px; }
   .toolbar button {
-    padding: 8px 20px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background: #fff;
-    color: #333;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
+    padding: 8px 20px; border: 1px solid #ddd; border-radius: 6px; background: #fff;
+    color: #333; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit;
   }
+  .toolbar button:hover { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
 
-  .toolbar button:hover {
-    background: #1a1a2e;
-    color: #fff;
-    border-color: #1a1a2e;
+  .summary-box {
+    margin-top: 40px; padding: 24px; background: #f8f9fb; border-radius: 8px;
+    display: flex; gap: 40px; flex-wrap: wrap;
   }
-
-  .summary {
-    margin-top: 32px;
-    padding: 20px 24px;
-    background: #f8f9fb;
-    border-radius: 8px;
-    display: flex;
-    gap: 40px;
-    flex-wrap: wrap;
-  }
-
   .summary-item { display: flex; flex-direction: column; }
   .summary-label { font-size: 12px; color: #888; margin-bottom: 4px; }
   .summary-value { font-size: 24px; font-weight: 700; color: #1a1a2e; }
-
-  .section-header td {
-    background: #e8edf5;
-    font-weight: 700;
-    color: #1a1a2e;
-    font-size: 13px;
-    padding: 10px;
-  }
 
   @media print {
     body { background: #fff; padding: 0; }
     .container { box-shadow: none; padding: 20px; }
     thead th { position: static; }
     .no-print { display: none; }
-    table { font-size: 11px; }
-  }
-
-  .collapse-btn {
-    cursor: pointer;
-    user-select: none;
-    font-size: 12px;
-    margin-left: 6px;
-    color: #999;
+    .section-title { page-break-before: auto; }
   }
 </style>
 </head>
 <body>
-
 <div class="container">
-  <h1>大语言模型（LLM）评估维度全景表</h1>
-  <p class="page-subtitle">极致细化版 &nbsp;|&nbsp; 10 大一级维度 · 56 二级 · 150+ 三级子维度 &nbsp;|&nbsp; 双击单元格可编辑</p>
 
-  <div class="toolbar no-print">
-    <button onclick="window.print()">导出 PDF / 打印</button>
-    <button onclick="exportCSV()">导出 CSV</button>
-  </div>
+<h1>LLM 模型评估维度体系</h1>
+<p class="page-sub">用户视角 · 实用导向 &nbsp;|&nbsp; 6 大板块 · 32 个二级维度 · 108 个三级指标 &nbsp;|&nbsp; 双击单元格可编辑</p>
 
-  <table id="mainTable">
-    <thead>
-      <tr>
-        <th style="width:10%">一级维度</th>
-        <th style="width:11%">二级子维度</th>
-        <th style="width:13%">三级子维度</th>
-        <th style="width:14%">代表 Benchmark</th>
-        <th style="width:28%">评测方式 / 指标</th>
-        <th style="width:12%">GPT-4 参考</th>
-        <th style="width:12%">备注</th>
-      </tr>
-    </thead>
-    <tbody>
+<div class="toolbar no-print">
+  <button onclick="window.print()">导出 PDF / 打印</button>
+  <button onclick="exportCSV()">导出 CSV</button>
+</div>
 
-<!-- ====================== 1. 知识与语言理解 ====================== -->
-<tr class="cat-1"><td class="dim-1" rowspan="29">1. 知识与<br>语言理解</td><td class="dim-2" rowspan="7" contenteditable="true">1.1 跨学科知识</td><td contenteditable="true">STEM 知识（物理/化学/生物/CS/工程）</td><td contenteditable="true" class="bm">MMLU-STEM</td><td contenteditable="true">多选题 5-shot，涵盖大学本科水平</td><td contenteditable="true" class="sc">~89%</td><td contenteditable="true">57 学科之 STEM 子集</td></tr>
-<tr class="cat-1"><td contenteditable="true">人文知识（历史/哲学/文学/语言学）</td><td contenteditable="true" class="bm">MMLU-Humanities</td><td contenteditable="true">多选题 5-shot</td><td contenteditable="true" class="sc">~87%</td><td contenteditable="true">57 学科之人文子集</td></tr>
-<tr class="cat-1"><td contenteditable="true">社会科学（经济/法律/心理/政治/社会学）</td><td contenteditable="true" class="bm">MMLU-Social Sciences</td><td contenteditable="true">多选题 5-shot</td><td contenteditable="true" class="sc">~90%</td><td contenteditable="true">57 学科之社科子集</td></tr>
-<tr class="cat-1"><td contenteditable="true">医学知识（临床/药学/公卫）</td><td contenteditable="true" class="bm">MedQA / PubMedQA</td><td contenteditable="true">医学执照考试题 / 文献问答</td><td contenteditable="true" class="sc">~86%（MedQA）</td><td contenteditable="true">USMLE 风格</td></tr>
-<tr class="cat-1"><td contenteditable="true">专业资格考试（律师/医师/CPA）</td><td contenteditable="true" class="bm">Bar Exam / USMLE</td><td contenteditable="true">模拟真实职业资格考试</td><td contenteditable="true" class="sc">Bar Exam Top 10%</td><td contenteditable="true">GPT-4 技术报告公布</td></tr>
-<tr class="cat-1"><td contenteditable="true">深度强化知识</td><td contenteditable="true" class="bm">MMLU-PRO</td><td contenteditable="true">多选题选项更多（10选1）、难度更高</td><td contenteditable="true" class="sc">~72%</td><td contenteditable="true">HF Leaderboard v2 采用</td></tr>
-<tr class="cat-1"><td contenteditable="true">标准化学术考试</td><td contenteditable="true" class="bm">SAT / GRE / AP</td><td contenteditable="true">模拟标准化考试全科</td><td contenteditable="true" class="sc">SAT 1410/1600</td><td contenteditable="true">多科综合</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st1">一、任务完成度 —— 用户的任务到底完成了没有？</div>
+<!-- ================================================================== -->
+<table class="t1">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">正面示例</th>
+  <th style="width:20%">反面示例</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="3">指令遵循</td><td class="dim-2" contenteditable="true">任务指令覆盖</td><td contenteditable="true">用户的每一条显式要求是否都被执行到，是否有遗漏</td><td contenteditable="true">"请列出3个方案并比较" → 给出3个方案+对比表</td><td contenteditable="true">只给了2个方案，漏掉了对比</td></tr>
+<tr><td class="dim-2" contenteditable="true">约束条件满足</td><td contenteditable="true">字数限制、格式要求、语言指定、范围限定等硬约束是否遵守</td><td contenteditable="true">"用200字以内" → 精确控制在200字</td><td contenteditable="true">要求200字却写了800字</td></tr>
+<tr><td class="dim-2" contenteditable="true">偏离/无法遵循时的处理</td><td contenteditable="true">当指令矛盾或无法执行时，是否主动说明而非静默偏离</td><td contenteditable="true">"这两个要求有冲突，我按X优先处理，原因是…"</td><td contenteditable="true">默默只做了一半，不解释原因</td></tr>
 
-<tr class="cat-1"><td class="dim-2" rowspan="6" contenteditable="true">1.2 阅读理解</td><td contenteditable="true">抽取式问答</td><td contenteditable="true" class="bm">SQuAD 2.0</td><td contenteditable="true">从段落中抽取答案片段 / 判断无答案，F1 指标</td><td contenteditable="true" class="sc">~90+ F1</td><td contenteditable="true">经典 MRC benchmark</td></tr>
-<tr class="cat-1"><td contenteditable="true">判断式问答（Yes/No）</td><td contenteditable="true" class="bm">BoolQ</td><td contenteditable="true">基于段落回答是/否问题</td><td contenteditable="true" class="sc">>95%</td><td contenteditable="true">SuperGLUE 子任务</td></tr>
-<tr class="cat-1"><td contenteditable="true">多选阅读理解</td><td contenteditable="true" class="bm">RACE / RACE++</td><td contenteditable="true">中高考英语阅读理解多选题</td><td contenteditable="true" class="sc">>90%</td><td contenteditable="true">中/高中两个难度</td></tr>
-<tr class="cat-1"><td contenteditable="true">生成式长文档问答</td><td contenteditable="true" class="bm">NarrativeQA</td><td contenteditable="true">需阅读整本书/电影剧本后生成答案</td><td contenteditable="true" class="na">—</td><td contenteditable="true">ROUGE / BLEU 评估</td></tr>
-<tr class="cat-1"><td contenteditable="true">多文档/多跳理解</td><td contenteditable="true" class="bm">HotpotQA / MultiRC</td><td contenteditable="true">跨多个段落/文档推理得到答案</td><td contenteditable="true" class="na">—</td><td contenteditable="true">需要信息整合能力</td></tr>
-<tr class="cat-1"><td contenteditable="true">数值推理阅读</td><td contenteditable="true" class="bm">DROP</td><td contenteditable="true">在段落上做计数/排序/算术推理</td><td contenteditable="true" class="sc">80.9 F1</td><td contenteditable="true">融合阅读+数学</td></tr>
+<tr><td class="dim-1" rowspan="4">意图还原</td><td class="dim-2" contenteditable="true">字面意图</td><td contenteditable="true">用户话语的表层含义是否被准确理解</td><td contenteditable="true">"Python怎么读CSV" → 给出pandas读取代码</td><td contenteditable="true">开始讲CSV文件格式的历史</td></tr>
+<tr><td class="dim-2" contenteditable="true">背后意图</td><td contenteditable="true">用户没明说但真正想要的是什么（问"怎么排序"可能真正要的是"怎么找最大值"）</td><td contenteditable="true">给了排序方案后补充"如果你只需要前N个，可以用heapq更高效"</td><td contenteditable="true">机械回答字面问题，不理解真实目的</td></tr>
+<tr><td class="dim-2" contenteditable="true">情境还原</td><td contenteditable="true">能否从上下文推断用户的角色、场景、技术水平，并据此调整回答</td><td contenteditable="true">检测到用户是初学者，自动简化术语并增加解释</td><td contenteditable="true">对初学者满口术语，对专家解释基础概念</td></tr>
+<tr><td class="dim-2" contenteditable="true">模糊意图的处理</td><td contenteditable="true">当用户表达模糊时，是合理假设并说明、还是追问、还是盲目猜测</td><td contenteditable="true">"你可能是指X，我先按X回答，如果你指的是Y…"</td><td contenteditable="true">随意猜测一个方向就开始长篇大论</td></tr>
 
-<tr class="cat-1"><td class="dim-2" rowspan="5" contenteditable="true">1.3 常识理解</td><td contenteditable="true">句子续写常识</td><td contenteditable="true" class="bm">HellaSwag</td><td contenteditable="true">4 选 1 句子续写，10-shot</td><td contenteditable="true" class="sc">95.3%</td><td contenteditable="true">对抗过滤构建</td></tr>
-<tr class="cat-1"><td contenteditable="true">概念常识问答</td><td contenteditable="true" class="bm">CommonsenseQA</td><td contenteditable="true">5 选 1，基于 ConceptNet 的常识问题</td><td contenteditable="true" class="sc">>85%</td><td contenteditable="true"></td></tr>
-<tr class="cat-1"><td contenteditable="true">物理直觉常识</td><td contenteditable="true" class="bm">PIQA</td><td contenteditable="true">日常物理场景判断（2 选 1）</td><td contenteditable="true" class="sc">>95%</td><td contenteditable="true">如"怎么切面包"</td></tr>
-<tr class="cat-1"><td contenteditable="true">社会交互常识</td><td contenteditable="true" class="bm">SocialIQa</td><td contenteditable="true">社会情境下的情感/意图推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">人际互动理解</td></tr>
-<tr class="cat-1"><td contenteditable="true">科学常识</td><td contenteditable="true" class="bm">ARC-Easy / Challenge</td><td contenteditable="true">小学科学多选题，分简单/挑战</td><td contenteditable="true" class="sc">96.4%（Challenge）</td><td contenteditable="true"></td></tr>
+<tr><td class="dim-1" rowspan="3">完成的纵深</td><td class="dim-2" contenteditable="true">当前问题闭环</td><td contenteditable="true">回答本身是否形成闭环，用户拿到后能否直接用，还是需要继续追问</td><td contenteditable="true">给出代码+安装依赖命令+运行方式+预期输出</td><td contenteditable="true">只给代码片段，缺少关键依赖和运行说明</td></tr>
+<tr><td class="dim-2" contenteditable="true">下一步预判</td><td contenteditable="true">能否预见用户接下来可能遇到的问题或需求，主动补充</td><td contenteditable="true">"部署后你可能遇到跨域问题，解决方案是…"</td><td contenteditable="true">只回答当前问，不考虑后续步骤</td></tr>
+<tr><td class="dim-2" contenteditable="true">边界感知</td><td contenteditable="true">做到什么程度就该停，不过度展开、不喧宾夺主</td><td contenteditable="true">用户问一个小问题，简洁回答而非写一篇论文</td><td contenteditable="true">一个简单问题引出5000字的全面综述</td></tr>
 
-<tr class="cat-1"><td class="dim-2" rowspan="4" contenteditable="true">1.4 事实准确性</td><td contenteditable="true">常见误区识别</td><td contenteditable="true" class="bm">TruthfulQA</td><td contenteditable="true">817 题 38 类别，判断是否输出流行但错误的信息</td><td contenteditable="true" class="sc">~60%</td><td contenteditable="true">人类基线 94%</td></tr>
-<tr class="cat-1"><td contenteditable="true">幻觉检测（生成式）</td><td contenteditable="true" class="bm">HaluEval</td><td contenteditable="true">检测 QA/摘要/对话中编造的信息</td><td contenteditable="true" class="na">—</td><td contenteditable="true">35K 样本</td></tr>
-<tr class="cat-1"><td contenteditable="true">来源归因/引用</td><td contenteditable="true" class="bm">ALCE</td><td contenteditable="true">生成答案并引用来源，评估引用准确率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Citation F1</td></tr>
-<tr class="cat-1"><td contenteditable="true">知识时效性</td><td contenteditable="true" class="bm">RealTimeQA</td><td contenteditable="true">基于最新新闻事件的问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">知识截止日期测试</td></tr>
+<tr><td class="dim-1" rowspan="3">可执行性</td><td class="dim-2" contenteditable="true">落地距离</td><td contenteditable="true">输出和"直接能用"之间还差多少步？用户拿到后能否直接执行</td><td contenteditable="true">给出可直接复制粘贴运行的完整代码</td><td contenteditable="true">给出伪代码或描述性方案，需要大量改写</td></tr>
+<tr><td class="dim-2" contenteditable="true">条件适配</td><td contenteditable="true">方案是否考虑了用户的实际环境和约束（技术栈、资源、权限等）</td><td contenteditable="true">知道用户用Python 3.8，避免使用3.10+语法</td><td contenteditable="true">给出的方案需要用户没有的工具或权限</td></tr>
+<tr><td class="dim-2" contenteditable="true">备选方案</td><td contenteditable="true">是否提供了替代路径，万一首选方案不可行时用户不会卡住</td><td contenteditable="true">"方案A最优，如果不行可以试方案B，原因是…"</td><td contenteditable="true">只给一条路，走不通就无路可走</td></tr>
+</tbody>
+</table>
 
-<tr class="cat-1"><td class="dim-2" rowspan="7" contenteditable="true">1.5 语言基础能力</td><td contenteditable="true">文本蕴含（NLI）</td><td contenteditable="true" class="bm">MNLI / RTE</td><td contenteditable="true">判断两句之间蕴含/矛盾/中立关系</td><td contenteditable="true" class="sc">>92%</td><td contenteditable="true">GLUE/SuperGLUE 核心任务</td></tr>
-<tr class="cat-1"><td contenteditable="true">情感分析</td><td contenteditable="true" class="bm">SST-2</td><td contenteditable="true">电影评论正/负情感二分类</td><td contenteditable="true" class="sc">>96%</td><td contenteditable="true">GLUE 子任务</td></tr>
-<tr class="cat-1"><td contenteditable="true">语义相似度</td><td contenteditable="true" class="bm">STS-B</td><td contenteditable="true">句对语义相似度打分（1-5 分）</td><td contenteditable="true" class="sc">>92 Pearson</td><td contenteditable="true">回归任务</td></tr>
-<tr class="cat-1"><td contenteditable="true">共指消解</td><td contenteditable="true" class="bm">WSC / WinoGrande</td><td contenteditable="true">代词指代判断</td><td contenteditable="true" class="sc">87.5%</td><td contenteditable="true">Winograd Schema</td></tr>
-<tr class="cat-1"><td contenteditable="true">词义消歧</td><td contenteditable="true" class="bm">WiC</td><td contenteditable="true">判断同一个词在两个句子中是否同义</td><td contenteditable="true" class="na">—</td><td contenteditable="true">SuperGLUE 子任务</td></tr>
-<tr class="cat-1"><td contenteditable="true">文本分类</td><td contenteditable="true" class="bm">AG News / DBPedia</td><td contenteditable="true">新闻/百科主题分类</td><td contenteditable="true" class="na">—</td><td contenteditable="true">In-context learning</td></tr>
-<tr class="cat-1"><td contenteditable="true">文本摘要</td><td contenteditable="true" class="bm">CNN/DailyMail / XSum</td><td contenteditable="true">生成新闻摘要，ROUGE 指标</td><td contenteditable="true" class="na">—</td><td contenteditable="true">抽取式 vs 生成式</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st2">二、内容质量 —— 给出的内容本身质量如何？</div>
+<!-- ================================================================== -->
+<table class="t2">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">正面示例</th>
+  <th style="width:20%">反面示例</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="3">准确性</td><td class="dim-2" contenteditable="true">事实正确</td><td contenteditable="true">陈述的事实、数据、引用是否经得起验证</td><td contenteditable="true">引用的 API 参数名、返回值类型完全正确</td><td contenteditable="true">编造不存在的函数名或参数</td></tr>
+<tr><td class="dim-2" contenteditable="true">明确范围</td><td contenteditable="true">知识的适用条件和边界是否清晰标注（版本、平台、场景限制）</td><td contenteditable="true">"在 Python 3.9+ 中可以使用 dict | 语法"</td><td contenteditable="true">给出的方案没说明只适用于特定版本</td></tr>
+<tr><td class="dim-2" contenteditable="true">细节经得起查证</td><td contenteditable="true">关键细节（年份、数值、出处）是否精确可查</td><td contenteditable="true">明确引用来源和版本号</td><td contenteditable="true">随意编造数据或引用</td></tr>
 
-<!-- ====================== 2. 推理能力 ====================== -->
-<tr class="cat-2"><td class="dim-1" rowspan="23">2. 推理能力</td><td class="dim-2" rowspan="5" contenteditable="true">2.1 逻辑推理</td><td contenteditable="true">演绎推理（前提→结论）</td><td contenteditable="true" class="bm">LogiQA / FOLIO</td><td contenteditable="true">逻辑阅读理解选择题 / 一阶逻辑推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">三段论/条件推理等</td></tr>
-<tr class="cat-2"><td contenteditable="true">归纳推理（样本→规律）</td><td contenteditable="true" class="bm">CLUTRR</td><td contenteditable="true">从亲属关系故事中归纳推理关系</td><td contenteditable="true" class="na">—</td><td contenteditable="true">多跳关系推理</td></tr>
-<tr class="cat-2"><td contenteditable="true">溯因推理（结果→原因）</td><td contenteditable="true" class="bm">αNLI (Abductive NLI)</td><td contenteditable="true">给定起点和终点，选择最合理的中间解释</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Abductive reasoning</td></tr>
-<tr class="cat-2"><td contenteditable="true">类比推理（A:B = C:?）</td><td contenteditable="true" class="bm">BIG-Bench Analogies</td><td contenteditable="true">词语/概念类比关系推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-<tr class="cat-2"><td contenteditable="true">命题逻辑 / 谓词逻辑</td><td contenteditable="true" class="bm">ProofWriter / PrOntoQA</td><td contenteditable="true">基于规则集的逻辑证明/推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">封闭世界推理</td></tr>
+<tr><td class="dim-1" rowspan="3">内容深度</td><td class="dim-2" contenteditable="true">解释机制（Why / How）</td><td contenteditable="true">不仅告诉"是什么"，还解释"为什么"和"怎么运作的"</td><td contenteditable="true">"HashMap用红黑树是因为链表在冲突过多时查找退化为O(n)"</td><td contenteditable="true">只说"HashMap用红黑树"，不解释原因</td></tr>
+<tr><td class="dim-2" contenteditable="true">启发性见解</td><td contenteditable="true">是否提供了超出用户已知范围的新洞察、新视角或跨领域联系</td><td contenteditable="true">指出问题本质和某个设计模式的深层联系</td><td contenteditable="true">只重复教科书上的标准答案</td></tr>
+<tr><td class="dim-2" contenteditable="true">深度的适配</td><td contenteditable="true">深度是否匹配用户水平——对初学者不过深，对专家不过浅</td><td contenteditable="true">根据对话判断用户水平，动态调整深度</td><td contenteditable="true">对所有人给同样深度的回答</td></tr>
 
-<tr class="cat-2"><td class="dim-2" rowspan="4" contenteditable="true">2.2 因果推理</td><td contenteditable="true">因果识别（选择原因/结果）</td><td contenteditable="true" class="bm">COPA</td><td contenteditable="true">给定前提，选因 or 选果（2选1）</td><td contenteditable="true" class="sc">>95%</td><td contenteditable="true">SuperGLUE 子任务</td></tr>
-<tr class="cat-2"><td contenteditable="true">反事实推理</td><td contenteditable="true" class="bm">CRASS / Counterfactual</td><td contenteditable="true">"如果 X 不发生，会怎样？"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">假设情境推理</td></tr>
-<tr class="cat-2"><td contenteditable="true">因果链推理</td><td contenteditable="true" class="bm">e-CARE</td><td contenteditable="true">多步因果链的构建与验证</td><td contenteditable="true" class="na">—</td><td contenteditable="true">含解释生成</td></tr>
-<tr class="cat-2"><td contenteditable="true">因果发现</td><td contenteditable="true" class="bm">CausalBench / CORR2CAUSE</td><td contenteditable="true">从相关性数据中判断因果方向</td><td contenteditable="true" class="na">—</td><td contenteditable="true">统计因果推断</td></tr>
+<tr><td class="dim-1" rowspan="3">观点性</td><td class="dim-2" contenteditable="true">态度明确</td><td contenteditable="true">需要给建议时是否敢于给出明确推荐，而非永远"各有优劣"</td><td contenteditable="true">"对你的场景，我推荐 PostgreSQL，原因是…"</td><td contenteditable="true">"MySQL和PostgreSQL各有优劣，取决于你的需求"（等于没说）</td></tr>
+<tr><td class="dim-2" contenteditable="true">判断有支撑</td><td contenteditable="true">观点/推荐是否有论据和推理过程支撑，而非空泛断言</td><td contenteditable="true">"推荐X因为：1.性能高20% 2.社区活跃 3.你的团队已有经验"</td><td contenteditable="true">"推荐X因为它很好"</td></tr>
+<tr><td class="dim-2" contenteditable="true">保留异见空间</td><td contenteditable="true">在给出推荐的同时，是否承认其他选择在特定条件下可能更优</td><td contenteditable="true">"推荐X，但如果你特别看重Y，Z也值得考虑"</td><td contenteditable="true">把推荐说成唯一正确答案</td></tr>
 
-<tr class="cat-2"><td class="dim-2" rowspan="4" contenteditable="true">2.3 空间与时间推理</td><td contenteditable="true">空间关系推理</td><td contenteditable="true" class="bm">SpartQA / StepGame</td><td contenteditable="true">基于文本描述推理物体空间位置</td><td contenteditable="true" class="na">—</td><td contenteditable="true">上下左右/包含关系</td></tr>
-<tr class="cat-2"><td contenteditable="true">时间顺序推理</td><td contenteditable="true" class="bm">TempReason / TimeDial</td><td contenteditable="true">事件时序排列 / 时间表达理解</td><td contenteditable="true" class="na">—</td><td contenteditable="true">before/after/during</td></tr>
-<tr class="cat-2"><td contenteditable="true">导航推理</td><td contenteditable="true" class="bm">BIG-Bench Navigate</td><td contenteditable="true">按指令行走后判断位置</td><td contenteditable="true" class="na">—</td><td contenteditable="true">方向+步数</td></tr>
-<tr class="cat-2"><td contenteditable="true">图结构推理</td><td contenteditable="true" class="bm">GraphQA / NLGraph</td><td contenteditable="true">图的连通性/最短路径/环检测等</td><td contenteditable="true" class="na">—</td><td contenteditable="true">文本描述的图推理</td></tr>
+<tr><td class="dim-1" rowspan="4">信息密度</td><td class="dim-2" contenteditable="true">信息增量</td><td contenteditable="true">每句话是否都在传递新信息，还是在重复和注水</td><td contenteditable="true">每一句话都有新的知识点或推进论述</td><td contenteditable="true">同一个意思换不同说法重复3遍</td></tr>
+<tr><td class="dim-2" contenteditable="true">冗余感知</td><td contenteditable="true">能否识别和消除不必要的废话、套话、过渡语</td><td contenteditable="true">直入主题，无"当然，这是一个很好的问题"</td><td contenteditable="true">开头大段客套，正文反复铺垫</td></tr>
+<tr><td class="dim-2" contenteditable="true">知识压缩比</td><td contenteditable="true">用最少的文字传递最多的有效信息</td><td contenteditable="true">一段话精炼地覆盖了核心要点</td><td contenteditable="true">一篇长文实际信息量只有一段话的水平</td></tr>
+<tr><td class="dim-2" contenteditable="true">信息保鲜期</td><td contenteditable="true">给出的信息是否标注了时效性，过时信息是否明确标注</td><td contenteditable="true">"截至2024年，推荐做法是…（注意这可能会随版本更新）"</td><td contenteditable="true">给出已过时的信息而不提醒</td></tr>
 
-<tr class="cat-2"><td class="dim-2" rowspan="4" contenteditable="true">2.4 多步推理</td><td contenteditable="true">多跳问答</td><td contenteditable="true" class="bm">HotpotQA / MuSiQue</td><td contenteditable="true">跨多个文档的多跳信息推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">2-4 跳推理</td></tr>
-<tr class="cat-2"><td contenteditable="true">多步软推理</td><td contenteditable="true" class="bm">MuSR</td><td contenteditable="true">带模糊性的多步推理，无唯一解</td><td contenteditable="true" class="na">—</td><td contenteditable="true">HF Leaderboard v2</td></tr>
-<tr class="cat-2"><td contenteditable="true">思维链推理</td><td contenteditable="true" class="bm">BBH（23 个任务）</td><td contenteditable="true">精确匹配，CoT 提示后评估</td><td contenteditable="true" class="sc">17 个任务超人类</td><td contenteditable="true">BIG-Bench Hard</td></tr>
-<tr class="cat-2"><td contenteditable="true">递归 / 嵌套推理</td><td contenteditable="true" class="bm">BIG-Bench Dyck / Tracking</td><td contenteditable="true">括号匹配 / 多对象状态追踪</td><td contenteditable="true" class="na">—</td><td contenteditable="true">符号操作能力</td></tr>
+<tr><td class="dim-1" rowspan="3">原创性</td><td class="dim-2" contenteditable="true">修辞新鲜精确</td><td contenteditable="true">措辞是否精准贴切，避免陈词滥调和模板化表达</td><td contenteditable="true">用精确的比喻解释复杂概念</td><td contenteditable="true">"在当今快速发展的XXX领域…"模板开头</td></tr>
+<tr><td class="dim-2" contenteditable="true">视角独特</td><td contenteditable="true">是否提供了与常规搜索结果不同的分析角度或思考路径</td><td contenteditable="true">从一个不常见但有价值的角度切入问题</td><td contenteditable="true">和搜索引擎第一页结果完全一样</td></tr>
+<tr><td class="dim-2" contenteditable="true">重构能力</td><td contenteditable="true">能否将已有知识重新组织，生成针对具体问题的定制化回答</td><td contenteditable="true">把多领域知识融合成针对用户场景的解决方案</td><td contenteditable="true">直接复述某篇文章/文档的内容</td></tr>
 
-<tr class="cat-2"><td class="dim-2" rowspan="3" contenteditable="true">2.5 科学推理</td><td contenteditable="true">研究生级科学推理</td><td contenteditable="true" class="bm">GPQA (Diamond)</td><td contenteditable="true">物理/化学/生物难题，专家构建</td><td contenteditable="true" class="sc">~50%</td><td contenteditable="true">领域专家仅 65%</td></tr>
-<tr class="cat-2"><td contenteditable="true">多模态科学推理</td><td contenteditable="true" class="bm">ScienceQA</td><td contenteditable="true">含图像的小学科学多选题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">图文结合</td></tr>
-<tr class="cat-2"><td contenteditable="true">实验设计推理</td><td contenteditable="true" class="bm">SciBench</td><td contenteditable="true">大学理工教材习题（含公式推导）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">需要计算过程</td></tr>
+<tr><td class="dim-1" rowspan="2">具体性</td><td class="dim-2" contenteditable="true">例子</td><td contenteditable="true">是否用具体的例子/代码/数据来说明抽象概念</td><td contenteditable="true">"比如处理100万行CSV时，pandas耗时3s，polars仅0.5s"</td><td contenteditable="true">"polars比pandas快很多"（无具体数据）</td></tr>
+<tr><td class="dim-2" contenteditable="true">细节</td><td contenteditable="true">关键步骤是否有足够的操作细节，不会让用户在执行时卡住</td><td contenteditable="true">每个步骤都有具体的命令、参数和预期结果</td><td contenteditable="true">"配置好环境后运行即可"（怎么配？运行什么？）</td></tr>
 
-<tr class="cat-2"><td class="dim-2" rowspan="3" contenteditable="true">2.6 符号推理</td><td contenteditable="true">符号操作</td><td contenteditable="true" class="bm">BIG-Bench Symbolic</td><td contenteditable="true">字符串拼接/翻转、列表操作等</td><td contenteditable="true" class="na">—</td><td contenteditable="true">纯符号变换</td></tr>
-<tr class="cat-2"><td contenteditable="true">程序执行追踪</td><td contenteditable="true" class="bm">CRUXEval</td><td contenteditable="true">预测代码片段的输入/输出</td><td contenteditable="true" class="na">—</td><td contenteditable="true">模拟解释器</td></tr>
-<tr class="cat-2"><td contenteditable="true">约束满足</td><td contenteditable="true" class="bm">Constraint Satisfaction Tasks</td><td contenteditable="true">满足多重约束的组合搜索</td><td contenteditable="true" class="na">—</td><td contenteditable="true">如排列/数独等</td></tr>
+<tr><td class="dim-1" rowspan="2">确定性表达</td><td class="dim-2" contenteditable="true">确信/推测要明确区分</td><td contenteditable="true">已知事实用确定语气，不确定的内容明确标注推测/猜测</td><td contenteditable="true">"这是官方文档的说法"vs"我不确定，但可能是因为…"</td><td contenteditable="true">用确定语气说不确定的事，或用不确定语气说确定的事</td></tr>
+<tr><td class="dim-2" contenteditable="true">不过度自信/谦虚</td><td contenteditable="true">不对所有事都斩钉截铁，也不对所有事都加"可能"——校准准确</td><td contenteditable="true">在自己擅长的领域自信，在不确定时坦诚</td><td contenteditable="true">对明显正确的事也说"我不太确定"</td></tr>
 
-<!-- ====================== 3. 数学能力 ====================== -->
-<tr class="cat-3"><td class="dim-1" rowspan="20">3. 数学能力</td><td class="dim-2" rowspan="3" contenteditable="true">3.1 算术运算</td><td contenteditable="true">基础四则运算</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">加减乘除准确率</td><td contenteditable="true" class="sc">接近 100%</td><td contenteditable="true">小数字</td></tr>
-<tr class="cat-3"><td contenteditable="true">大数运算 / 精度</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">多位数乘除、精度保持</td><td contenteditable="true" class="na">误差较大</td><td contenteditable="true">8+ 位数字时显著下降</td></tr>
-<tr class="cat-3"><td contenteditable="true">小数 / 分数 / 百分比运算</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">混合运算准确率</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
+<tr><td class="dim-1" rowspan="3">自洽性</td><td class="dim-2" contenteditable="true">逻辑自洽</td><td contenteditable="true">同一回答中不同部分之间是否逻辑一致，没有自相矛盾</td><td contenteditable="true">前后论述逻辑链完整，结论与论证一致</td><td contenteditable="true">前面说"推荐A"，后面分析完又说"B更好"</td></tr>
+<tr><td class="dim-2" contenteditable="true">论据支撑论点</td><td contenteditable="true">列举的理由是否真的能支撑结论，有无偷换概念或跳跃</td><td contenteditable="true">每个论据都直接指向结论，逻辑链条清晰</td><td contenteditable="true">列了一堆优点但和结论无关</td></tr>
+<tr><td class="dim-2" contenteditable="true">多轮记忆一致</td><td contenteditable="true">跨多轮对话时，是否和之前说的保持一致，不自打脸</td><td contenteditable="true">记住之前的推荐和理由，后续讨论保持一致</td><td contenteditable="true">第3轮推翻第1轮的观点却不说明原因</td></tr>
 
-<tr class="cat-3"><td class="dim-2" rowspan="3" contenteditable="true">3.2 应用题求解</td><td contenteditable="true">小学应用题（多步算术）</td><td contenteditable="true" class="bm">GSM8K</td><td contenteditable="true">8.5K 题，2-8 步算术推理，CoT</td><td contenteditable="true" class="sc">92%（5-shot CoT）</td><td contenteditable="true">最常用数学 benchmark</td></tr>
-<tr class="cat-3"><td contenteditable="true">中学应用题</td><td contenteditable="true" class="bm">MATH Lvl 1-3</td><td contenteditable="true">代数/几何入门到中等难度</td><td contenteditable="true" class="sc">~60-70%</td><td contenteditable="true">MATH 前 3 级</td></tr>
-<tr class="cat-3"><td contenteditable="true">竞赛/高等应用题</td><td contenteditable="true" class="bm">MATH Lvl 4-5</td><td contenteditable="true">竞赛级别高难度问题</td><td contenteditable="true" class="sc">~25-30%（Lvl5）</td><td contenteditable="true">HF Leaderboard v2</td></tr>
+<tr><td class="dim-1" rowspan="2">专业度</td><td class="dim-2" contenteditable="true">术语精确</td><td contenteditable="true">使用专业术语时是否准确，不混淆概念</td><td contenteditable="true">正确区分"并发"和"并行"、"认证"和"授权"</td><td contenteditable="true">混用"进程"和"线程"，不加区分</td></tr>
+<tr><td class="dim-2" contenteditable="true">选择性展示信息</td><td contenteditable="true">像专家一样判断哪些信息重要需要展开、哪些可以略过</td><td contenteditable="true">突出关键决策点，简化不影响理解的细节</td><td contenteditable="true">所有细节平铺直叙，主次不分</td></tr>
+</tbody>
+</table>
 
-<tr class="cat-3"><td class="dim-2" rowspan="7" contenteditable="true">3.3 分支数学</td><td contenteditable="true">代数（方程/不等式/多项式）</td><td contenteditable="true" class="bm">MATH-Algebra</td><td contenteditable="true">MATH 中代数子集</td><td contenteditable="true" class="sc">~55%</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">几何（平面/立体/解析）</td><td contenteditable="true" class="bm">MATH-Geometry</td><td contenteditable="true">MATH 中几何子集</td><td contenteditable="true" class="sc">~35%</td><td contenteditable="true">视觉/图形推理较弱</td></tr>
-<tr class="cat-3"><td contenteditable="true">数论（整除/同余/素数）</td><td contenteditable="true" class="bm">MATH-NumberTheory</td><td contenteditable="true">MATH 中数论子集</td><td contenteditable="true" class="sc">~40%</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">概率与统计</td><td contenteditable="true" class="bm">MATH-Probability / AP Stats</td><td contenteditable="true">概率计算/贝叶斯/统计推断</td><td contenteditable="true" class="sc">~45%</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">微积分</td><td contenteditable="true" class="bm">MATH-Calculus / AP Calculus</td><td contenteditable="true">极限/导数/积分/级数</td><td contenteditable="true" class="sc">AP: 4/5</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">组合数学</td><td contenteditable="true" class="bm">MATH-Combinatorics</td><td contenteditable="true">排列组合/容斥/递推</td><td contenteditable="true" class="sc">~35%</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">线性代数 / 抽象代数</td><td contenteditable="true" class="bm">SciBench-Math</td><td contenteditable="true">矩阵运算/向量空间/群论基础</td><td contenteditable="true" class="na">—</td><td contenteditable="true">大学高等数学</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st3">三、表达与呈现 —— 同样的内容怎么说更好？</div>
+<!-- ================================================================== -->
+<table class="t3">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">正面示例</th>
+  <th style="width:20%">反面示例</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="4">结构化</td><td class="dim-2" contenteditable="true">层次分明</td><td contenteditable="true">信息是否有清晰的层级关系（总→分、问题→方案→步骤）</td><td contenteditable="true">先给结论，再按优先级展开论证</td><td contenteditable="true">信息平铺，找不到主线</td></tr>
+<tr><td class="dim-2" contenteditable="true">逻辑连贯</td><td contenteditable="true">段落/条目之间的过渡是否自然，阅读时能否"跟着走"</td><td contenteditable="true">每个部分自然地引向下一个</td><td contenteditable="true">各部分割裂，像拼凑的碎片</td></tr>
+<tr><td class="dim-2" contenteditable="true">重点突出</td><td contenteditable="true">关键信息是否容易被扫读捕捉（通过位置/格式/措辞）</td><td contenteditable="true">核心结论放在开头，用粗体/高亮标记关键点</td><td contenteditable="true">重要信息埋在大段文字中间</td></tr>
+<tr><td class="dim-2" contenteditable="true">长度适当</td><td contenteditable="true">回答长度是否和问题复杂度匹配</td><td contenteditable="true">简单问题简洁回答，复杂问题充分展开</td><td contenteditable="true">简单问题长篇大论，复杂问题三言两语</td></tr>
 
-<tr class="cat-3"><td class="dim-2" rowspan="3" contenteditable="true">3.4 形式化数学</td><td contenteditable="true">定理证明</td><td contenteditable="true" class="bm">MiniF2F</td><td contenteditable="true">在 Lean/Isabelle 中形式化证明</td><td contenteditable="true" class="na">—</td><td contenteditable="true">proof assistant</td></tr>
-<tr class="cat-3"><td contenteditable="true">自动形式化（自然语言→形式语言）</td><td contenteditable="true" class="bm">Autoformalization tasks</td><td contenteditable="true">将自然语言数学表述翻译为形式化语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">NL→Lean/Isabelle</td></tr>
-<tr class="cat-3"><td contenteditable="true">证明验证</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">验证给定证明的正确性</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
+<tr><td class="dim-1" rowspan="3">语言质量</td><td class="dim-2" contenteditable="true">自然度 / 去AI味</td><td contenteditable="true">是否像人类专家在说话，而非模板化生成</td><td contenteditable="true">用自然口语化的方式解释技术问题</td><td contenteditable="true">"作为一个AI语言模型，我…""当然！这是一个很好的问题！"</td></tr>
+<tr><td class="dim-2" contenteditable="true">措辞精炼</td><td contenteditable="true">是否用最精炼的表达传递意思，无冗余词句</td><td contenteditable="true">一句话说清楚的事不用三句话</td><td contenteditable="true">"需要注意的是，值得一提的是，重要的是…"连续铺垫</td></tr>
+<tr><td class="dim-2" contenteditable="true">语法与拼写</td><td contenteditable="true">语法是否正确，中英文混排是否规范</td><td contenteditable="true">中英文之间有空格，标点使用正确</td><td contenteditable="true">中英文标点混用，语法错误</td></tr>
 
-<tr class="cat-3"><td class="dim-2" rowspan="2" contenteditable="true">3.5 多语言 & 竞赛</td><td contenteditable="true">多语言数学推理</td><td contenteditable="true" class="bm">MGSM</td><td contenteditable="true">GSM8K 翻译为 10 种语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">中/日/法/德/泰等</td></tr>
-<tr class="cat-3"><td contenteditable="true">数学竞赛（AMC/AIME/IMO）</td><td contenteditable="true" class="bm">AMC 10/12, AIME</td><td contenteditable="true">美国数学竞赛真题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">最高难度数学测试</td></tr>
+<tr><td class="dim-1" rowspan="3">风格适配</td><td class="dim-2" contenteditable="true">语域匹配</td><td contenteditable="true">口语/书面/学术/技术的风格是否匹配场景</td><td contenteditable="true">代码Review用技术语言，用户聊天用轻松语言</td><td contenteditable="true">所有场景都用同一种腔调</td></tr>
+<tr><td class="dim-2" contenteditable="true">受众适配</td><td contenteditable="true">表达方式是否匹配目标读者（开发者/产品经理/领导/用户）</td><td contenteditable="true">给领导汇报用结论先行+数据支撑，给开发者用技术细节</td><td contenteditable="true">和谁都用一个风格沟通</td></tr>
+<tr><td class="dim-2" contenteditable="true">情绪适配</td><td contenteditable="true">回复的情绪基调是否匹配对话场景（紧急/随意/严肃）</td><td contenteditable="true">用户着急时直给方案，闲聊时可以轻松些</td><td contenteditable="true">用户着急修bug时还在讲原理和历史</td></tr>
 
-<tr class="cat-3"><td class="dim-2" rowspan="2" contenteditable="true">3.6 考试数学</td><td contenteditable="true">SAT / GRE 数学</td><td contenteditable="true" class="bm">SAT Math / GRE Quant</td><td contenteditable="true">标准化考试数学部分</td><td contenteditable="true" class="sc">SAT 700/800</td><td contenteditable="true"></td></tr>
-<tr class="cat-3"><td contenteditable="true">AP 微积分 / AP 统计</td><td contenteditable="true" class="bm">AP Calculus BC / AP Stats</td><td contenteditable="true">大学先修课考试</td><td contenteditable="true" class="sc">AP: 4/5</td><td contenteditable="true"></td></tr>
+<tr><td class="dim-1" rowspan="3">格式运用</td><td class="dim-2" contenteditable="true">Markdown 运用</td><td contenteditable="true">标题/列表/表格/代码块的使用是否恰当、增加可读性</td><td contenteditable="true">对比场景用表格，步骤用有序列表，代码用代码块</td><td contenteditable="true">全部用纯文本堆在一起，或过度使用格式</td></tr>
+<tr><td class="dim-2" contenteditable="true">代码格式</td><td contenteditable="true">代码块是否标注语言、是否有必要的注释、是否可直接运行</td><td contenteditable="true">```python 标注语言，关键行有注释</td><td contenteditable="true">代码没有语言标注，无注释，缩进混乱</td></tr>
+<tr><td class="dim-2" contenteditable="true">视觉节奏</td><td contenteditable="true">排版是否有视觉呼吸感——适当的留白、分段、不压迫</td><td contenteditable="true">段落间有间距，长文有章节划分</td><td contenteditable="true">密密麻麻一大块文字毫无分段</td></tr>
+</tbody>
+</table>
 
-<!-- ====================== 4. 代码能力 ====================== -->
-<tr class="cat-4"><td class="dim-1" rowspan="22">4. 代码能力</td><td class="dim-2" rowspan="4" contenteditable="true">4.1 代码生成</td><td contenteditable="true">函数级生成（单函数）</td><td contenteditable="true" class="bm">HumanEval</td><td contenteditable="true">164 题 Python，docstring→实现，Pass@1</td><td contenteditable="true" class="sc">67%（0-shot）</td><td contenteditable="true">OpenAI 提出</td></tr>
-<tr class="cat-4"><td contenteditable="true">基础编程题</td><td contenteditable="true" class="bm">MBPP / MBPP+</td><td contenteditable="true">974 道 Python 基础题，自然语言→代码</td><td contenteditable="true" class="sc">~80%</td><td contenteditable="true">EvalPlus 增强版</td></tr>
-<tr class="cat-4"><td contenteditable="true">类级生成（完整类）</td><td contenteditable="true" class="bm">ClassEval</td><td contenteditable="true">生成完整 Python 类（含方法交互）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">多方法协同</td></tr>
-<tr class="cat-4"><td contenteditable="true">项目级生成</td><td contenteditable="true" class="bm">DevBench / CrossCodeEval</td><td contenteditable="true">生成跨文件的项目级代码</td><td contenteditable="true" class="na">—</td><td contenteditable="true">需理解项目结构</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st4">四、交互能力 —— 多轮沟通中表现如何？</div>
+<!-- ================================================================== -->
+<table class="t4">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">正面示例</th>
+  <th style="width:20%">反面示例</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="3">上下文理解</td><td class="dim-2" contenteditable="true">指代消解</td><td contenteditable="true">理解"这个""那个""刚才的方案"等指代，不需要用户重复</td><td contenteditable="true">"把刚才的代码改成异步" → 正确定位之前的代码</td><td contenteditable="true">"你指的是哪段代码？"（明明只有一段）</td></tr>
+<tr><td class="dim-2" contenteditable="true">隐含信息提取</td><td contenteditable="true">从对话历史中提取用户的技术栈、偏好、约束等隐含信息</td><td contenteditable="true">记住用户之前提到用React，后续建议自动用React生态</td><td contenteditable="true">每次都从零开始问用户用什么技术栈</td></tr>
+<tr><td class="dim-2" contenteditable="true">话题边界感知</td><td contenteditable="true">能否区分新话题 vs 延续旧话题，不把无关上下文混入</td><td contenteditable="true">用户切换话题时干净地切换，不把旧上下文混入</td><td contenteditable="true">新话题中莫名其妙引用旧对话的内容</td></tr>
 
-<tr class="cat-4"><td class="dim-2" rowspan="5" contenteditable="true">4.2 代码理解</td><td contenteditable="true">代码摘要（代码→自然语言）</td><td contenteditable="true" class="bm">CodeXGLUE-Summary</td><td contenteditable="true">为代码生成自然语言描述，BLEU</td><td contenteditable="true" class="na">—</td><td contenteditable="true">6 种语言</td></tr>
-<tr class="cat-4"><td contenteditable="true">代码搜索（NL→代码匹配）</td><td contenteditable="true" class="bm">CodeXGLUE-Search</td><td contenteditable="true">根据自然语言查找对应代码片段，MRR</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-<tr class="cat-4"><td contenteditable="true">输入/输出预测</td><td contenteditable="true" class="bm">CRUXEval</td><td contenteditable="true">给定代码预测输入→输出 或 输出→输入</td><td contenteditable="true" class="na">—</td><td contenteditable="true">代码执行模拟</td></tr>
-<tr class="cat-4"><td contenteditable="true">缺陷检测</td><td contenteditable="true" class="bm">CodeXGLUE-Defect</td><td contenteditable="true">判断代码是否存在缺陷/漏洞</td><td contenteditable="true" class="na">—</td><td contenteditable="true">二分类</td></tr>
-<tr class="cat-4"><td contenteditable="true">代码克隆检测</td><td contenteditable="true" class="bm">CodeXGLUE-Clone / BigCloneBench</td><td contenteditable="true">判断两段代码是否语义等价</td><td contenteditable="true" class="na">—</td><td contenteditable="true">语义克隆</td></tr>
+<tr><td class="dim-1" rowspan="4">多轮协作</td><td class="dim-2" contenteditable="true">渐进式细化</td><td contenteditable="true">能否通过多轮对话逐步收窄和精确化方案</td><td contenteditable="true">第1轮给框架→第2轮细化模块→第3轮优化细节</td><td contenteditable="true">每一轮都推倒重来，不积累</td></tr>
+<tr><td class="dim-2" contenteditable="true">纠错响应</td><td contenteditable="true">用户指出错误后的修正质量：是否真正修正、是否引入新错误</td><td contenteditable="true">承认错误+修正+解释为什么之前错了</td><td contenteditable="true">嘴上说"你说得对"但实际没改，或改了又引入新bug</td></tr>
+<tr><td class="dim-2" contenteditable="true">需求变更处理</td><td contenteditable="true">用户中途改需求时，能否灵活调整而非从头重来</td><td contenteditable="true">"好的，基于之前的方案，我把X部分改为…其余保持不变"</td><td contenteditable="true">每次改一点需求就完全重写整个方案</td></tr>
+<tr><td class="dim-2" contenteditable="true">进度感知</td><td contenteditable="true">复杂任务中能否让用户知道当前进度和下一步计划</td><td contenteditable="true">"已完成数据模型设计，接下来做API接口，最后做前端"</td><td contenteditable="true">闷头做，用户不知道做到哪了</td></tr>
 
-<tr class="cat-4"><td class="dim-2" rowspan="3" contenteditable="true">4.3 代码修复</td><td contenteditable="true">Bug 定位与修复</td><td contenteditable="true" class="bm">SWE-bench / SWE-bench Verified</td><td contenteditable="true">修复真实 GitHub issue，端到端</td><td contenteditable="true" class="sc">~12-20%</td><td contenteditable="true">2294 个真实任务</td></tr>
-<tr class="cat-4"><td contenteditable="true">自动修补（小粒度）</td><td contenteditable="true" class="bm">QuixBugs / Defects4J</td><td contenteditable="true">修复单个函数级 bug</td><td contenteditable="true" class="na">—</td><td contenteditable="true">经典 APR benchmark</td></tr>
-<tr class="cat-4"><td contenteditable="true">代码审查 / Review</td><td contenteditable="true" class="bm">CodeReviewer</td><td contenteditable="true">对代码变更生成审查意见</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
+<tr><td class="dim-1" rowspan="3">边界感知</td><td class="dim-2" contenteditable="true">能力边界坦诚</td><td contenteditable="true">遇到不会的/不确定的，是否坦诚而非硬编</td><td contenteditable="true">"这个我不确定，建议你查阅X文档确认"</td><td contenteditable="true">不懂也要编出一个看似合理的答案</td></tr>
+<tr><td class="dim-2" contenteditable="true">适时追问</td><td contenteditable="true">信息不足时主动追问关键信息，而非基于假设盲目回答</td><td contenteditable="true">"你是要部署到哪个环境？这会影响我的建议"</td><td contenteditable="true">信息严重不足时自行假设了所有条件</td></tr>
+<tr><td class="dim-2" contenteditable="true">主动 vs 被动的平衡</td><td contenteditable="true">既不过度被动（只回答问）也不过度主动（强加建议）</td><td contenteditable="true">回答问题后适度补充"顺便提一下…"</td><td contenteditable="true">要么只回答字面问题，要么每次都加500字额外建议</td></tr>
+</tbody>
+</table>
 
-<tr class="cat-4"><td class="dim-2" rowspan="3" contenteditable="true">4.4 多语言 & 翻译</td><td contenteditable="true">多语言代码生成</td><td contenteditable="true" class="bm">MultiPL-E</td><td contenteditable="true">HumanEval 扩展到 18+ 种编程语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Java/C++/Go/Rust等</td></tr>
-<tr class="cat-4"><td contenteditable="true">跨语言代码翻译</td><td contenteditable="true" class="bm">CodeXGLUE-Translation</td><td contenteditable="true">Java↔C# 等跨语言翻译</td><td contenteditable="true" class="na">—</td><td contenteditable="true">BLEU + 功能正确性</td></tr>
-<tr class="cat-4"><td contenteditable="true">代码补全（续写）</td><td contenteditable="true" class="bm">CodeXGLUE-Completion</td><td contenteditable="true">给定上文续写代码，token/line 级</td><td contenteditable="true" class="na">—</td><td contenteditable="true">EM / Edit Similarity</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st5">五、安全与边界 —— 可靠性和风险控制如何？</div>
+<!-- ================================================================== -->
+<table class="t5">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">正面示例</th>
+  <th style="width:20%">反面示例</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="3">幻觉控制</td><td class="dim-2" contenteditable="true">事实幻觉率</td><td contenteditable="true">编造不存在的 API / 函数 / 库 / 历史事件的频率</td><td contenteditable="true">只推荐真实存在且验证过的工具</td><td contenteditable="true">编造一个看似合理但不存在的npm包</td></tr>
+<tr><td class="dim-2" contenteditable="true">引用幻觉率</td><td contenteditable="true">引用的文献、链接、数据来源是否真实存在</td><td contenteditable="true">给出的链接都可以访问且内容匹配</td><td contenteditable="true">给出一个格式正确但实际404的URL</td></tr>
+<tr><td class="dim-2" contenteditable="true">幻觉自我检测</td><td contenteditable="true">能否在生成过程中意识到自己可能在编造，并主动标注</td><td contenteditable="true">"关于这个具体数字我不太确定，建议核实"</td><td contenteditable="true">用非常自信的语气编造一个数据</td></tr>
 
-<tr class="cat-4"><td class="dim-2" rowspan="3" contenteditable="true">4.5 竞赛编程</td><td contenteditable="true">算法竞赛</td><td contenteditable="true" class="bm">LiveCodeBench</td><td contenteditable="true">持续更新的竞赛题，防数据污染</td><td contenteditable="true" class="na">—</td><td contenteditable="true">动态更新</td></tr>
-<tr class="cat-4"><td contenteditable="true">Codeforces 风格</td><td contenteditable="true" class="bm">APPS</td><td contenteditable="true">5000 题，3 个难度级（入门/面试/竞赛）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Pass@k</td></tr>
-<tr class="cat-4"><td contenteditable="true">数据结构与算法</td><td contenteditable="true" class="bm">LeetCode-Hard 子集</td><td contenteditable="true">高难度算法题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">实际工程面试</td></tr>
+<tr><td class="dim-1" rowspan="3">偏见与公平</td><td class="dim-2" contenteditable="true">群体偏见</td><td contenteditable="true">是否对不同性别/种族/文化群体有差异化对待</td><td contenteditable="true">对所有群体使用同等尊重的表达</td><td contenteditable="true">含有刻板印象或歧视性暗示</td></tr>
+<tr><td class="dim-2" contenteditable="true">立场中立性</td><td contenteditable="true">在争议性话题上是否能保持客观中立</td><td contenteditable="true">呈现多方观点，让用户自行判断</td><td contenteditable="true">在争议话题上暗中偏向一方</td></tr>
+<tr><td class="dim-2" contenteditable="true">技术选型中立</td><td contenteditable="true">在推荐技术方案时是否有不合理的偏好</td><td contenteditable="true">基于用户需求客观分析，不无条件推某个工具</td><td contenteditable="true">不管场景总是推荐同一个技术栈</td></tr>
 
-<tr class="cat-4"><td class="dim-2" rowspan="4" contenteditable="true">4.6 软件工程</td><td contenteditable="true">测试用例生成</td><td contenteditable="true" class="bm">EvalPlus / TestPilot</td><td contenteditable="true">为给定函数自动生成测试用例</td><td contenteditable="true" class="na">—</td><td contenteditable="true">覆盖率+有效性</td></tr>
-<tr class="cat-4"><td contenteditable="true">文档生成</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">为代码自动生成 API 文档</td><td contenteditable="true" class="na">—</td><td contenteditable="true">docstring 质量</td></tr>
-<tr class="cat-4"><td contenteditable="true">依赖分析 / 重构</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">分析依赖关系、建议重构方案</td><td contenteditable="true" class="na">—</td><td contenteditable="true">工程经验</td></tr>
-<tr class="cat-4"><td contenteditable="true">CI/CD 配置理解</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">理解并修改构建/部署配置</td><td contenteditable="true" class="na">—</td><td contenteditable="true">YAML/Dockerfile 等</td></tr>
+<tr><td class="dim-1" rowspan="3">拒绝行为</td><td class="dim-2" contenteditable="true">合理拒绝</td><td contenteditable="true">对真正危险/违法/不道德的请求能否正确拒绝</td><td contenteditable="true">拒绝并解释原因</td><td contenteditable="true">执行了不应该执行的有害请求</td></tr>
+<tr><td class="dim-2" contenteditable="true">过度拒绝</td><td contenteditable="true">对完全合理的请求是否误拒（安全过度）</td><td contenteditable="true">正常回答安全的技术问题</td><td contenteditable="true">"我不能帮你写加密代码"（合理的加密需求）</td></tr>
+<tr><td class="dim-2" contenteditable="true">拒绝时的替代方案</td><td contenteditable="true">拒绝时是否提供替代路径或解释为什么不行</td><td contenteditable="true">"我不能直接做X，但你可以通过Y来实现类似效果"</td><td contenteditable="true">只说"抱歉我不能帮你"就结束了</td></tr>
 
-<!-- ====================== 5. 多语言能力 ====================== -->
-<tr class="cat-5"><td class="dim-1" rowspan="16">5. 多语言能力</td><td class="dim-2" rowspan="4" contenteditable="true">5.1 跨语言理解</td><td contenteditable="true">跨语言自然语言推理</td><td contenteditable="true" class="bm">XNLI</td><td contenteditable="true">15 种语言，蕴含/矛盾/中立</td><td contenteditable="true" class="na">—</td><td contenteditable="true">机翻 + 原生标注</td></tr>
-<tr class="cat-5"><td contenteditable="true">跨语言问答</td><td contenteditable="true" class="bm">XQuAD / MLQA</td><td contenteditable="true">SQuAD 风格多语言抽取式问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">11 种语言</td></tr>
-<tr class="cat-5"><td contenteditable="true">跨语言常识推理</td><td contenteditable="true" class="bm">XCOPA</td><td contenteditable="true">COPA 的 11 种语言扩展</td><td contenteditable="true" class="na">—</td><td contenteditable="true">因果推理</td></tr>
-<tr class="cat-5"><td contenteditable="true">跨语言摘要</td><td contenteditable="true" class="bm">CrossSum</td><td contenteditable="true">跨语言文本摘要</td><td contenteditable="true" class="na">—</td><td contenteditable="true">源语言→目标语言摘要</td></tr>
+<tr><td class="dim-1" rowspan="2">隐私意识</td><td class="dim-2" contenteditable="true">敏感信息提醒</td><td contenteditable="true">用户意外暴露敏感信息时是否主动提醒</td><td contenteditable="true">"你的消息中包含了API密钥，建议立即更换"</td><td contenteditable="true">对用户贴出的密码/密钥视而不见</td></tr>
+<tr><td class="dim-2" contenteditable="true">代码安全意识</td><td contenteditable="true">生成的代码是否考虑了安全最佳实践</td><td contenteditable="true">自动使用参数化查询防SQL注入</td><td contenteditable="true">生成的代码有SQL注入/XSS漏洞</td></tr>
+</tbody>
+</table>
 
-<tr class="cat-5"><td class="dim-2" rowspan="4" contenteditable="true">5.2 翻译能力</td><td contenteditable="true">高资源语言翻译</td><td contenteditable="true" class="bm">WMT（en↔de/zh/fr 等）</td><td contenteditable="true">BLEU / COMET 评估</td><td contenteditable="true" class="na">—</td><td contenteditable="true">年度翻译共享任务</td></tr>
-<tr class="cat-5"><td contenteditable="true">低资源语言翻译</td><td contenteditable="true" class="bm">FLORES-200</td><td contenteditable="true">200+ 种语言翻译质量</td><td contenteditable="true" class="na">—</td><td contenteditable="true">含极低资源语言</td></tr>
-<tr class="cat-5"><td contenteditable="true">文学 / 创意翻译</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">诗歌/小说风格保持度，人工评估</td><td contenteditable="true" class="na">—</td><td contenteditable="true">风格+语义双重保真</td></tr>
-<tr class="cat-5"><td contenteditable="true">专业领域翻译（法律/医学/技术）</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">术语准确率 + 流畅度</td><td contenteditable="true" class="na">—</td><td contenteditable="true">术语一致性</td></tr>
+<!-- ================================================================== -->
+<div class="section-title st6">六、效率维度 —— 模型对比时的工程指标</div>
+<!-- ================================================================== -->
+<table class="t6">
+<thead><tr>
+  <th style="width:10%">二级维度</th>
+  <th style="width:14%">三级指标</th>
+  <th style="width:34%">评估要点</th>
+  <th style="width:22%">测量方法</th>
+  <th style="width:20%">对比意义</th>
+</tr></thead>
+<tbody>
+<tr><td class="dim-1" rowspan="3">响应速度</td><td class="dim-2" contenteditable="true">首 Token 延迟 (TTFT)</td><td contenteditable="true">从请求发出到收到第一个 token 的时间</td><td contenteditable="true">API 计时</td><td contenteditable="true">用户感知的"反应速度"</td></tr>
+<tr><td class="dim-2" contenteditable="true">生成速度 (TPS)</td><td contenteditable="true">每秒输出 token 数</td><td contenteditable="true">API 计时</td><td contenteditable="true">长回答等待时间</td></tr>
+<tr><td class="dim-2" contenteditable="true">可用性 / 稳定性</td><td contenteditable="true">API 是否频繁超时/报错/限流</td><td contenteditable="true">监控</td><td contenteditable="true">生产环境可靠性</td></tr>
 
-<tr class="cat-5"><td class="dim-2" rowspan="6" contenteditable="true">5.3 特定语言能力</td><td contenteditable="true">中文理解与知识</td><td contenteditable="true" class="bm">C-Eval / CMMLU</td><td contenteditable="true">中文学科知识评测（52/67 学科）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">中文 MMLU 等价物</td></tr>
-<tr class="cat-5"><td contenteditable="true">日语理解</td><td contenteditable="true" class="bm">JGLUE / JMMLU</td><td contenteditable="true">日语版 GLUE / MMLU</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-<tr class="cat-5"><td contenteditable="true">韩语理解</td><td contenteditable="true" class="bm">KoBEST / KMMLU</td><td contenteditable="true">韩语 NLU 评测套件</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-<tr class="cat-5"><td contenteditable="true">阿拉伯语理解</td><td contenteditable="true" class="bm">ArabicNLU / AceGPT-eval</td><td contenteditable="true">阿拉伯语 NLU 多任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">RTL 语言</td></tr>
-<tr class="cat-5"><td contenteditable="true">欧洲语言（法/德/西/意/葡）</td><td contenteditable="true" class="bm">MMLU 翻译版 / EuroQA</td><td contenteditable="true">各语言的知识/推理评测</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-<tr class="cat-5"><td contenteditable="true">多语言数学推理</td><td contenteditable="true" class="bm">MGSM</td><td contenteditable="true">GSM8K 翻译为 10 种语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">中/日/泰/孟加拉等</td></tr>
+<tr><td class="dim-1" rowspan="3">成本效益</td><td class="dim-2" contenteditable="true">单次调用成本</td><td contenteditable="true">完成一次典型任务的 token 消耗和费用</td><td contenteditable="true">API 账单</td><td contenteditable="true">运营成本</td></tr>
+<tr><td class="dim-2" contenteditable="true">性价比（质量/价格）</td><td contenteditable="true">每花一块钱买到的质量——便宜的模型质量够用就是最优</td><td contenteditable="true">质量评分 ÷ 单价</td><td contenteditable="true">选型核心指标</td></tr>
+<tr><td class="dim-2" contenteditable="true">Token 效率</td><td contenteditable="true">同样的回答质量，哪个模型用更少的 token 就能说清楚</td><td contenteditable="true">同一任务 token 对比</td><td contenteditable="true">信息密度的经济视角</td></tr>
 
-<tr class="cat-5"><td class="dim-2" rowspan="2" contenteditable="true">5.4 多语言代码</td><td contenteditable="true">多语言代码生成</td><td contenteditable="true" class="bm">MultiPL-E</td><td contenteditable="true">18+ 种编程语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">HumanEval 扩展</td></tr>
-<tr class="cat-5"><td contenteditable="true">非英语代码注释/变量名</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">处理含多语言注释的代码</td><td contenteditable="true" class="na">—</td><td contenteditable="true">实际场景</td></tr>
+<tr><td class="dim-1" rowspan="2">上下文效率</td><td class="dim-2" contenteditable="true">上下文窗口利用率</td><td contenteditable="true">长上下文是否真的被有效利用，而非"塞了但没读"</td><td contenteditable="true">NIAH + 长文档问答</td><td contenteditable="true">标称128K实际只用到前16K</td></tr>
+<tr><td class="dim-2" contenteditable="true">长上下文质量衰减</td><td contenteditable="true">上下文增长时回答质量是否显著下降</td><td contenteditable="true">不同长度下的质量对比</td><td contenteditable="true">长文档处理可行性</td></tr>
+</tbody>
+</table>
 
-<!-- ====================== 6. 指令遵循 ====================== -->
-<tr class="cat-6"><td class="dim-1" rowspan="13">6. 指令遵循</td><td class="dim-2" rowspan="4" contenteditable="true">6.1 格式约束</td><td contenteditable="true">输出长度控制（字数/段数/句数）</td><td contenteditable="true" class="bm">IFEval</td><td contenteditable="true">"恰好 3 段""不超过 100 字"等</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Prompt-level + Inst-level</td></tr>
-<tr class="cat-6"><td contenteditable="true">输出格式控制（JSON/XML/MD/YAML）</td><td contenteditable="true" class="bm">IFEval</td><td contenteditable="true">指定结构化输出格式</td><td contenteditable="true" class="na">—</td><td contenteditable="true">格式合法性检查</td></tr>
-<tr class="cat-6"><td contenteditable="true">语言约束（指定语言回复）</td><td contenteditable="true" class="bm">IFEval</td><td contenteditable="true">"请用英文回答""用法语回复"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">自动检测输出语言</td></tr>
-<tr class="cat-6"><td contenteditable="true">特殊符号/标记约束</td><td contenteditable="true" class="bm">IFEval</td><td contenteditable="true">"全部大写""用粗体标记""加编号"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">正则验证</td></tr>
+<!-- 统计 -->
+<div class="summary-box">
+  <div class="summary-item"><span class="summary-label">评估板块</span><span class="summary-value">6</span></div>
+  <div class="summary-item"><span class="summary-label">二级维度</span><span class="summary-value">32</span></div>
+  <div class="summary-item"><span class="summary-label">三级指标</span><span class="summary-value">108</span></div>
+  <div class="summary-item"><span class="summary-label">每项含</span><span class="summary-value">正/反例</span></div>
+</div>
 
-<tr class="cat-6"><td class="dim-2" rowspan="3" contenteditable="true">6.2 内容约束</td><td contenteditable="true">关键词包含/排除</td><td contenteditable="true" class="bm">IFEval / FollowBench</td><td contenteditable="true">"必须包含 X""不要提及 Y"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">字符串匹配</td></tr>
-<tr class="cat-6"><td contenteditable="true">角色/身份约束</td><td contenteditable="true" class="bm">FollowBench</td><td contenteditable="true">"作为一名医生回答""你是古代诗人"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">情境约束</td></tr>
-<tr class="cat-6"><td contenteditable="true">主题/范围约束</td><td contenteditable="true" class="bm">FollowBench</td><td contenteditable="true">"只讨论 X 主题""不要偏离 Y"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">内容相关性</td></tr>
-
-<tr class="cat-6"><td class="dim-2" rowspan="3" contenteditable="true">6.3 复合指令</td><td contenteditable="true">多约束组合</td><td contenteditable="true" class="bm">FollowBench</td><td contenteditable="true">同时满足 3+ 个约束条件</td><td contenteditable="true" class="na">—</td><td contenteditable="true">5 层难度递进</td></tr>
-<tr class="cat-6"><td contenteditable="true">嵌套指令</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">"如果 X 则做 A，否则做 B"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">条件分支遵循</td></tr>
-<tr class="cat-6"><td contenteditable="true">分步指令</td><td contenteditable="true" class="bm">InFoBench</td><td contenteditable="true">将复杂指令拆解为原子需求逐一验证</td><td contenteditable="true" class="na">—</td><td contenteditable="true">分解→逐一打分</td></tr>
-
-<tr class="cat-6"><td class="dim-2" rowspan="3" contenteditable="true">6.4 鲁棒性</td><td contenteditable="true">指令改写一致性</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">同义改写指令后输出是否一致</td><td contenteditable="true" class="na">—</td><td contenteditable="true">语义等价不变性</td></tr>
-<tr class="cat-6"><td contenteditable="true">噪声/冗余指令容忍</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">指令含无关信息时能否正确提取意图</td><td contenteditable="true" class="na">—</td><td contenteditable="true">干扰项过滤</td></tr>
-<tr class="cat-6"><td contenteditable="true">矛盾指令处理</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">指令自相矛盾时的处理策略</td><td contenteditable="true" class="na">—</td><td contenteditable="true">应拒绝或澄清</td></tr>
-
-<!-- ====================== 7. 对话与交互 ====================== -->
-<tr class="cat-7"><td class="dim-1" rowspan="17">7. 对话与交互</td><td class="dim-2" rowspan="3" contenteditable="true">7.1 单轮对话</td><td contenteditable="true">开放式问答</td><td contenteditable="true" class="bm">AlpacaEval 2.0</td><td contenteditable="true">LLM-as-Judge 评判胜率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">LC 版本控制长度偏差</td></tr>
-<tr class="cat-7"><td contenteditable="true">知识密集型问答</td><td contenteditable="true" class="bm">Natural Questions / TriviaQA</td><td contenteditable="true">知识密集型开放域问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">EM / F1</td></tr>
-<tr class="cat-7"><td contenteditable="true">创意写作（故事/诗歌/文案）</td><td contenteditable="true" class="bm">Chatbot Arena-Creative</td><td contenteditable="true">人类偏好评判创意质量</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Arena 子榜单</td></tr>
-
-<tr class="cat-7"><td class="dim-2" rowspan="5" contenteditable="true">7.2 多轮对话</td><td contenteditable="true">上下文保持 / 记忆</td><td contenteditable="true" class="bm">MT-Bench</td><td contenteditable="true">GPT-4 评判多轮对话质量（10 分制）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">8 大类别</td></tr>
-<tr class="cat-7"><td contenteditable="true">话题切换 / 跟随</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">用户切换话题后是否流畅跟随</td><td contenteditable="true" class="na">—</td><td contenteditable="true">灵活性</td></tr>
-<tr class="cat-7"><td contenteditable="true">追问与澄清</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">面对模糊请求时主动追问</td><td contenteditable="true" class="na">—</td><td contenteditable="true">信息不足时的策略</td></tr>
-<tr class="cat-7"><td contenteditable="true">纠错与修正</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">用户纠正后能否修正并保持一致</td><td contenteditable="true" class="na">—</td><td contenteditable="true">不固执/不重蹈覆辙</td></tr>
-<tr class="cat-7"><td contenteditable="true">指代消解 / 省略补全</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">理解对话中的"它""那个"等指代</td><td contenteditable="true" class="na">—</td><td contenteditable="true">对话级共指</td></tr>
-
-<tr class="cat-7"><td class="dim-2" rowspan="4" contenteditable="true">7.3 人类偏好</td><td contenteditable="true">综合偏好（盲测）</td><td contenteditable="true" class="bm">Chatbot Arena (ELO)</td><td contenteditable="true">用户 A/B 对比投票，200K+ 投票</td><td contenteditable="true" class="sc">ELO #1 梯队</td><td contenteditable="true">最具公信力</td></tr>
-<tr class="cat-7"><td contenteditable="true">有用性 (Helpfulness)</td><td contenteditable="true" class="bm">Arena 子维度</td><td contenteditable="true">回答是否真正解决用户问题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">HHH 三维之一</td></tr>
-<tr class="cat-7"><td contenteditable="true">无害性 (Harmlessness)</td><td contenteditable="true" class="bm">Arena 子维度</td><td contenteditable="true">回答是否安全无害</td><td contenteditable="true" class="na">—</td><td contenteditable="true">HHH 三维之一</td></tr>
-<tr class="cat-7"><td contenteditable="true">诚实性 (Honesty)</td><td contenteditable="true" class="bm">Arena 子维度</td><td contenteditable="true">是否坦诚不确定性、不编造</td><td contenteditable="true" class="na">—</td><td contenteditable="true">HHH 三维之一</td></tr>
-
-<tr class="cat-7"><td class="dim-2" rowspan="3" contenteditable="true">7.4 长上下文</td><td contenteditable="true">长文档问答</td><td contenteditable="true" class="bm">LongBench / L-Eval</td><td contenteditable="true">4K-128K 上下文窗口任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">多种长文本任务</td></tr>
-<tr class="cat-7"><td contenteditable="true">信息检索 / 大海捞针</td><td contenteditable="true" class="bm">NIAH (Needle in a Haystack)</td><td contenteditable="true">在超长文本中定位特定信息</td><td contenteditable="true" class="na">—</td><td contenteditable="true">测试有效上下文长度</td></tr>
-<tr class="cat-7"><td contenteditable="true">长文摘要</td><td contenteditable="true" class="bm">BookSum / GovReport</td><td contenteditable="true">整本书/长报告的摘要</td><td contenteditable="true" class="na">—</td><td contenteditable="true">ROUGE + 人工</td></tr>
-
-<tr class="cat-7"><td class="dim-2" rowspan="2" contenteditable="true">7.5 角色扮演</td><td contenteditable="true">人设一致性 / 风格模仿</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">长对话中角色人设是否保持一致</td><td contenteditable="true" class="na">—</td><td contenteditable="true">人工评估</td></tr>
-<tr class="cat-7"><td contenteditable="true">语气/情绪控制</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">"用幽默的语气""正式学术风格"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">风格可控性</td></tr>
-
-<!-- ====================== 8. 多模态能力 ====================== -->
-<tr class="cat-8"><td class="dim-1" rowspan="19">8. 多模态能力</td><td class="dim-2" rowspan="4" contenteditable="true">8.1 图像理解</td><td contenteditable="true">图像描述 (Image Captioning)</td><td contenteditable="true" class="bm">COCO Captions / NoCaps</td><td contenteditable="true">为图像生成自然语言描述</td><td contenteditable="true" class="na">—</td><td contenteditable="true">CIDEr / BLEU</td></tr>
-<tr class="cat-8"><td contenteditable="true">通用视觉问答</td><td contenteditable="true" class="bm">VQAv2</td><td contenteditable="true">基于图像回答自然语言问题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">VQA Accuracy</td></tr>
-<tr class="cat-8"><td contenteditable="true">视觉推理</td><td contenteditable="true" class="bm">Visual7W / GQA</td><td contenteditable="true">基于图像的 what/where/when/why/how 推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">结构化场景图</td></tr>
-<tr class="cat-8"><td contenteditable="true">细粒度识别</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">区分细微视觉差异（品种/型号等）</td><td contenteditable="true" class="na">—</td><td contenteditable="true"></td></tr>
-
-<tr class="cat-8"><td class="dim-2" rowspan="4" contenteditable="true">8.2 文档与图表</td><td contenteditable="true">文档问答</td><td contenteditable="true" class="bm">DocVQA</td><td contenteditable="true">扫描文档的视觉问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">ANLS 指标</td></tr>
-<tr class="cat-8"><td contenteditable="true">图表问答</td><td contenteditable="true" class="bm">ChartQA</td><td contenteditable="true">从柱状图/折线图/饼图中提取数据并推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">人工+机器生成题</td></tr>
-<tr class="cat-8"><td contenteditable="true">表格理解</td><td contenteditable="true" class="bm">TableVQA / WTQ</td><td contenteditable="true">表格图片的数据理解与查询</td><td contenteditable="true" class="na">—</td><td contenteditable="true">结构化数据提取</td></tr>
-<tr class="cat-8"><td contenteditable="true">信息图理解</td><td contenteditable="true" class="bm">InfographicVQA</td><td contenteditable="true">复杂信息图的理解与问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">布局+文字+图形</td></tr>
-
-<tr class="cat-8"><td class="dim-2" rowspan="3" contenteditable="true">8.3 学术图文</td><td contenteditable="true">跨学科图文理解</td><td contenteditable="true" class="bm">MMMU</td><td contenteditable="true">大学级跨学科图文多选题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">30 个学科</td></tr>
-<tr class="cat-8"><td contenteditable="true">视觉数学推理</td><td contenteditable="true" class="bm">MathVista</td><td contenteditable="true">图表/几何/函数图形等数学推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">视觉+数学融合</td></tr>
-<tr class="cat-8"><td contenteditable="true">科学图像理解</td><td contenteditable="true" class="bm">ScienceQA (Image)</td><td contenteditable="true">含实验图/示意图的科学题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">图+文+选择</td></tr>
-
-<tr class="cat-8"><td class="dim-2" rowspan="3" contenteditable="true">8.4 OCR 能力</td><td contenteditable="true">印刷文字识别</td><td contenteditable="true" class="bm">OCRBench</td><td contenteditable="true">多场景印刷体文字提取</td><td contenteditable="true" class="na">—</td><td contenteditable="true">29 个子任务</td></tr>
-<tr class="cat-8"><td contenteditable="true">场景文字识别</td><td contenteditable="true" class="bm">TextVQA / ST-VQA</td><td contenteditable="true">自然场景中的文字阅读+问答</td><td contenteditable="true" class="na">—</td><td contenteditable="true">招牌/路牌/菜单等</td></tr>
-<tr class="cat-8"><td contenteditable="true">手写文字识别</td><td contenteditable="true" class="bm">IAM Handwriting</td><td contenteditable="true">手写体文字识别准确率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">CER / WER</td></tr>
-
-<tr class="cat-8"><td class="dim-2" rowspan="2" contenteditable="true">8.5 视觉定位</td><td contenteditable="true">指代表达定位</td><td contenteditable="true" class="bm">RefCOCO / RefCOCO+</td><td contenteditable="true">根据文本描述定位图像中的物体</td><td contenteditable="true" class="na">—</td><td contenteditable="true">IoU / Accuracy</td></tr>
-<tr class="cat-8"><td contenteditable="true">目标检测与计数</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">图像中特定物体的检测与计数</td><td contenteditable="true" class="na">—</td><td contenteditable="true">mAP</td></tr>
-
-<tr class="cat-8"><td class="dim-2" rowspan="3" contenteditable="true">8.6 视频理解</td><td contenteditable="true">视频问答</td><td contenteditable="true" class="bm">VideoQA / EgoSchema</td><td contenteditable="true">基于视频内容回答问题</td><td contenteditable="true" class="na">—</td><td contenteditable="true">时序理解</td></tr>
-<tr class="cat-8"><td contenteditable="true">视频描述 / 摘要</td><td contenteditable="true" class="bm">ActivityNet Captions</td><td contenteditable="true">为视频片段生成描述</td><td contenteditable="true" class="na">—</td><td contenteditable="true">CIDEr / METEOR</td></tr>
-<tr class="cat-8"><td contenteditable="true">时序事件定位</td><td contenteditable="true" class="bm">Charades-STA</td><td contenteditable="true">根据文本定位视频中的时间段</td><td contenteditable="true" class="na">—</td><td contenteditable="true">时间戳预测</td></tr>
-
-<!-- ====================== 9. 安全性与对齐 ====================== -->
-<tr class="cat-9"><td class="dim-1" rowspan="24">9. 安全性与对齐</td><td class="dim-2" rowspan="4" contenteditable="true">9.1 毒性</td><td contenteditable="true">显式毒性（脏话/威胁/侮辱）</td><td contenteditable="true" class="bm">RealToxicityPrompts</td><td contenteditable="true">测量不同毒性提示下有害续写概率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">100K 提示</td></tr>
-<tr class="cat-9"><td contenteditable="true">隐式毒性（微妙歧视/暗示）</td><td contenteditable="true" class="bm">ToxiGen</td><td contenteditable="true">针对 13 个群体的隐性有害语言</td><td contenteditable="true" class="na">—</td><td contenteditable="true">机器生成对抗样本</td></tr>
-<tr class="cat-9"><td contenteditable="true">仇恨言论检测</td><td contenteditable="true" class="bm">HateXplain</td><td contenteditable="true">检测+解释仇恨言论</td><td contenteditable="true" class="na">—</td><td contenteditable="true">含可解释标注</td></tr>
-<tr class="cat-9"><td contenteditable="true">攻击性语言</td><td contenteditable="true" class="bm">OLID / OffComBR</td><td contenteditable="true">攻击性语言多层级分类</td><td contenteditable="true" class="na">—</td><td contenteditable="true">攻击目标+类型</td></tr>
-
-<tr class="cat-9"><td class="dim-2" rowspan="5" contenteditable="true">9.2 偏见</td><td contenteditable="true">性别偏见</td><td contenteditable="true" class="bm">WinoBias / BBQ-Gender</td><td contenteditable="true">共指消解/QA 中的性别刻板印象</td><td contenteditable="true" class="na">—</td><td contenteditable="true">职业-性别关联</td></tr>
-<tr class="cat-9"><td contenteditable="true">种族/民族偏见</td><td contenteditable="true" class="bm">BBQ-Race / BOLD</td><td contenteditable="true">不同种族群体的差异化对待</td><td contenteditable="true" class="na">—</td><td contenteditable="true">情感极性差异</td></tr>
-<tr class="cat-9"><td contenteditable="true">年龄/残疾/宗教偏见</td><td contenteditable="true" class="bm">BBQ 对应子集</td><td contenteditable="true">弱势群体相关的刻板推理</td><td contenteditable="true" class="na">—</td><td contenteditable="true">9 个偏见类别</td></tr>
-<tr class="cat-9"><td contenteditable="true">社会经济偏见</td><td contenteditable="true" class="bm">BBQ-SES</td><td contenteditable="true">基于社会经济地位的偏见</td><td contenteditable="true" class="na">—</td><td contenteditable="true">收入/教育/职业</td></tr>
-<tr class="cat-9"><td contenteditable="true">刻板印象倾向</td><td contenteditable="true" class="bm">CrowS-Pairs</td><td contenteditable="true">成对句子比较，测偏好含刻板印象的句子</td><td contenteditable="true" class="na">—</td><td contenteditable="true">9 类偏见维度</td></tr>
-
-<tr class="cat-9"><td class="dim-2" rowspan="4" contenteditable="true">9.3 对抗鲁棒性</td><td contenteditable="true">越狱攻击（Jailbreak）</td><td contenteditable="true" class="bm">JailbreakBench / HarmBench</td><td contenteditable="true">对抗性提示诱导有害输出</td><td contenteditable="true" class="na">—</td><td contenteditable="true">ASR (Attack Success Rate)</td></tr>
-<tr class="cat-9"><td contenteditable="true">提示注入（Prompt Injection）</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">恶意指令注入系统提示</td><td contenteditable="true" class="na">—</td><td contenteditable="true">直接/间接注入</td></tr>
-<tr class="cat-9"><td contenteditable="true">对抗样本鲁棒性</td><td contenteditable="true" class="bm">AdvGLUE / DecodingTrust-Adv</td><td contenteditable="true">文本对抗扰动后的鲁棒性</td><td contenteditable="true" class="na">—</td><td contenteditable="true">字符/词/句级扰动</td></tr>
-<tr class="cat-9"><td contenteditable="true">分布外鲁棒性</td><td contenteditable="true" class="bm">DecodingTrust-OOD</td><td contenteditable="true">训练分布外数据的泛化能力</td><td contenteditable="true" class="na">—</td><td contenteditable="true">风格/领域迁移</td></tr>
-
-<tr class="cat-9"><td class="dim-2" rowspan="4" contenteditable="true">9.4 真实性与幻觉</td><td contenteditable="true">事实幻觉（闭卷）</td><td contenteditable="true" class="bm">TruthfulQA</td><td contenteditable="true">817 题，测试常见误区输出</td><td contenteditable="true" class="sc">~60%</td><td contenteditable="true">人类基线 94%</td></tr>
-<tr class="cat-9"><td contenteditable="true">忠实性幻觉（对输入不忠实）</td><td contenteditable="true" class="bm">FaithDial / HaluEval-Summ</td><td contenteditable="true">摘要/对话中是否忠于原文</td><td contenteditable="true" class="na">—</td><td contenteditable="true">faithfulness score</td></tr>
-<tr class="cat-9"><td contenteditable="true">不确定性表达（知道自己不知道）</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">面对未知问题是否坦诚"我不确定"</td><td contenteditable="true" class="na">—</td><td contenteditable="true">校准性评估</td></tr>
-<tr class="cat-9"><td contenteditable="true">来源可追溯性</td><td contenteditable="true" class="bm">ALCE</td><td contenteditable="true">引用来源的准确性和覆盖率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Citation Precision/Recall</td></tr>
-
-<tr class="cat-9"><td class="dim-2" rowspan="3" contenteditable="true">9.5 隐私</td><td contenteditable="true">个人信息泄露</td><td contenteditable="true" class="bm">DecodingTrust-Privacy</td><td contenteditable="true">提取姓名/邮箱/电话/地址等 PII</td><td contenteditable="true" class="na">—</td><td contenteditable="true">泄露率</td></tr>
-<tr class="cat-9"><td contenteditable="true">训练数据记忆提取</td><td contenteditable="true" class="bm">Membership Inference</td><td contenteditable="true">判断特定数据是否在训练集中</td><td contenteditable="true" class="na">—</td><td contenteditable="true">成员推断攻击</td></tr>
-<tr class="cat-9"><td contenteditable="true">差分隐私合规</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">模型是否满足差分隐私保证</td><td contenteditable="true" class="na">—</td><td contenteditable="true">ε-DP</td></tr>
-
-<tr class="cat-9"><td class="dim-2" rowspan="4" contenteditable="true">9.6 伦理与合规</td><td contenteditable="true">道德判断</td><td contenteditable="true" class="bm">ETHICS / Moral Scenarios</td><td contenteditable="true">伦理场景中的对/错判断</td><td contenteditable="true" class="na">—</td><td contenteditable="true">功利/义务/美德伦理</td></tr>
-<tr class="cat-9"><td contenteditable="true">价值观对齐</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">是否符合主流人类价值观</td><td contenteditable="true" class="na">—</td><td contenteditable="true">文化差异考量</td></tr>
-<tr class="cat-9"><td contenteditable="true">拒绝合规（不当请求拒绝）</td><td contenteditable="true" class="bm">XSTest / OR-Bench</td><td contenteditable="true">对非法/危险请求的拒绝率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">误拒率 vs 漏放率</td></tr>
-<tr class="cat-9"><td contenteditable="true">过度拒绝检测</td><td contenteditable="true" class="bm">XSTest</td><td contenteditable="true">对安全请求的过度拒绝（误报）</td><td contenteditable="true" class="na">—</td><td contenteditable="true">安全 vs 有用 平衡</td></tr>
-
-<!-- ====================== 10. 智能体与工具使用 ====================== -->
-<tr class="cat-10"><td class="dim-1" rowspan="19">10. 智能体与<br>工具使用</td><td class="dim-2" rowspan="4" contenteditable="true">10.1 工具调用</td><td contenteditable="true">单工具调用（选择+参数）</td><td contenteditable="true" class="bm">API-Bank</td><td contenteditable="true">从 API 库中选择正确 API 并填参数</td><td contenteditable="true" class="na">—</td><td contenteditable="true">53 个 API</td></tr>
-<tr class="cat-10"><td contenteditable="true">多工具组合编排</td><td contenteditable="true" class="bm">ToolBench</td><td contenteditable="true">组合多个 API 完成复杂任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">16K+ 真实 API</td></tr>
-<tr class="cat-10"><td contenteditable="true">函数调用准确性</td><td contenteditable="true" class="bm">Berkeley FC Bench (BFCL)</td><td contenteditable="true">函数名+参数类型+参数值准确率</td><td contenteditable="true" class="na">—</td><td contenteditable="true">AST 匹配</td></tr>
-<tr class="cat-10"><td contenteditable="true">API 文档理解</td><td contenteditable="true" class="bm">Gorilla</td><td contenteditable="true">从 API 文档中推理正确调用方式</td><td contenteditable="true" class="na">—</td><td contenteditable="true">1600+ API</td></tr>
-
-<tr class="cat-10"><td class="dim-2" rowspan="4" contenteditable="true">10.2 Web 交互</td><td contenteditable="true">网页浏览与操作</td><td contenteditable="true" class="bm">WebArena</td><td contenteditable="true">在真实网站上完成复杂任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">电商/论坛/CMS/GitLab</td></tr>
-<tr class="cat-10"><td contenteditable="true">表单填写 / 注册登录</td><td contenteditable="true" class="bm">MiniWoB++</td><td contenteditable="true">小型 Web 环境中的表单操作</td><td contenteditable="true" class="na">—</td><td contenteditable="true">点击/输入/选择</td></tr>
-<tr class="cat-10"><td contenteditable="true">信息检索与整合</td><td contenteditable="true" class="bm">WebArena 子集</td><td contenteditable="true">跨页面搜索、对比、总结信息</td><td contenteditable="true" class="na">—</td><td contenteditable="true">多步浏览</td></tr>
-<tr class="cat-10"><td contenteditable="true">网购/预订任务</td><td contenteditable="true" class="bm">WebShop</td><td contenteditable="true">在模拟电商中搜索+购买商品</td><td contenteditable="true" class="na">—</td><td contenteditable="true">奖励+成功率</td></tr>
-
-<tr class="cat-10"><td class="dim-2" rowspan="4" contenteditable="true">10.3 系统操作</td><td contenteditable="true">桌面 OS 操作</td><td contenteditable="true" class="bm">OSWorld</td><td contenteditable="true">在真实 Linux/macOS/Windows 中执行任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">截图→操作</td></tr>
-<tr class="cat-10"><td contenteditable="true">终端/命令行操作</td><td contenteditable="true" class="bm">InterCode-Bash</td><td contenteditable="true">在终端中执行多步 Bash 命令</td><td contenteditable="true" class="na">—</td><td contenteditable="true">交互式 shell</td></tr>
-<tr class="cat-10"><td contenteditable="true">文件系统管理</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">创建/移动/搜索/编辑文件</td><td contenteditable="true" class="na">—</td><td contenteditable="true">文件操作准确率</td></tr>
-<tr class="cat-10"><td contenteditable="true">跨应用操作</td><td contenteditable="true" class="bm">OSWorld 子集</td><td contenteditable="true">在多个桌面应用间切换完成任务</td><td contenteditable="true" class="na">—</td><td contenteditable="true">如 Excel→PPT→邮件</td></tr>
-
-<tr class="cat-10"><td class="dim-2" rowspan="4" contenteditable="true">10.4 规划与决策</td><td contenteditable="true">任务分解 / 子目标规划</td><td contenteditable="true" class="bm">AgentBench</td><td contenteditable="true">将复杂目标分解为可执行步骤</td><td contenteditable="true" class="na">—</td><td contenteditable="true">8 种环境</td></tr>
-<tr class="cat-10"><td contenteditable="true">长期规划 / 多步决策</td><td contenteditable="true" class="bm">ALFWorld / SciWorld</td><td contenteditable="true">在模拟环境中做 10+ 步决策</td><td contenteditable="true" class="na">—</td><td contenteditable="true">任务完成率</td></tr>
-<tr class="cat-10"><td contenteditable="true">错误恢复 / 重新规划</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">执行出错后自动诊断并调整计划</td><td contenteditable="true" class="na">—</td><td contenteditable="true">鲁棒性</td></tr>
-<tr class="cat-10"><td contenteditable="true">自我反思 (Reflection)</td><td contenteditable="true" class="bm">—</td><td contenteditable="true">评估自身输出质量并迭代改进</td><td contenteditable="true" class="na">—</td><td contenteditable="true">Reflexion 框架</td></tr>
-
-<tr class="cat-10"><td class="dim-2" rowspan="3" contenteditable="true">10.5 软件开发 Agent</td><td contenteditable="true">Issue 理解 + 代码定位</td><td contenteditable="true" class="bm">SWE-bench</td><td contenteditable="true">阅读 issue→定位相关代码文件/函数</td><td contenteditable="true" class="sc">~12-20%</td><td contenteditable="true">端到端评估</td></tr>
-<tr class="cat-10"><td contenteditable="true">补丁生成 + 测试验证</td><td contenteditable="true" class="bm">SWE-bench Verified</td><td contenteditable="true">生成修复补丁并通过测试</td><td contenteditable="true" class="na">—</td><td contenteditable="true">人工验证子集</td></tr>
-<tr class="cat-10"><td contenteditable="true">数据库操作 / SQL Agent</td><td contenteditable="true" class="bm">AgentBench-DB / Spider</td><td contenteditable="true">通过自然语言操作数据库</td><td contenteditable="true" class="na">—</td><td contenteditable="true">NL→SQL→执行</td></tr>
-
-    </tbody>
-  </table>
-
-  <div class="summary">
-    <div class="summary-item">
-      <span class="summary-label">一级维度</span>
-      <span class="summary-value">10</span>
-    </div>
-    <div class="summary-item">
-      <span class="summary-label">二级子维度</span>
-      <span class="summary-value">56</span>
-    </div>
-    <div class="summary-item">
-      <span class="summary-label">三级子维度</span>
-      <span class="summary-value">153</span>
-    </div>
-    <div class="summary-item">
-      <span class="summary-label">覆盖 Benchmark</span>
-      <span class="summary-value">100+</span>
-    </div>
-    <div class="summary-item">
-      <span class="summary-label">有 GPT-4 成绩</span>
-      <span class="summary-value">22</span>
-    </div>
-  </div>
 </div>
 
 <script>
 function exportCSV() {
-  const table = document.getElementById('mainTable');
-  const rows = table.querySelectorAll('tr');
+  const tables = document.querySelectorAll('table');
   let csv = [];
-  let curDim1 = '', curDim2 = '';
-
-  rows.forEach((row, idx) => {
-    const cells = row.querySelectorAll('th, td');
-    const rowData = [];
-    let colIdx = 0;
-
-    cells.forEach(cell => {
-      let text = cell.innerText.replace(/"/g, '""').replace(/\n/g, ' ').trim();
-      if (cell.classList.contains('dim-1')) curDim1 = text;
-      if (cell.classList.contains('dim-2')) curDim2 = text;
-      rowData.push('"' + text + '"');
-      colIdx++;
+  document.querySelectorAll('.section-title').forEach((h, i) => {
+    csv.push(''); csv.push('"' + h.innerText + '"');
+    const table = tables[i];
+    if (!table) return;
+    const rows = table.querySelectorAll('tr');
+    let d1 = '', d2 = '';
+    rows.forEach((row, idx) => {
+      const cells = row.querySelectorAll('th, td');
+      const rd = [];
+      cells.forEach(c => {
+        let t = c.innerText.replace(/"/g, '""').replace(/\n/g, ' ').trim();
+        if (c.classList.contains('dim-1')) d1 = t;
+        if (c.classList.contains('dim-2')) d2 = t;
+        rd.push('"' + t + '"');
+      });
+      if (idx > 0 && rd.length < 5) { rd.unshift('"' + d1 + '"'); }
+      csv.push(rd.join(','));
     });
-
-    if (idx > 0) {
-      while (rowData.length < 7) {
-        if (rowData.length === 0) rowData.unshift('"' + curDim1 + '"');
-        else if (rowData.length === 1) rowData.splice(1, 0, '"' + curDim2 + '"');
-        else break;
-      }
-      if (rowData.length === 5) {
-        rowData.unshift('"' + curDim1 + '"');
-        rowData.splice(1, 0, '"' + curDim2 + '"');
-      } else if (rowData.length === 6) {
-        rowData.unshift('"' + curDim1 + '"');
-      }
-    }
-
-    csv.push(rowData.join(','));
   });
-
-  const csvContent = '\uFEFF' + csv.join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'LLM评估维度全景表_细化版.csv';
-  link.click();
+  const blob = new Blob(['\uFEFF' + csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'LLM评估维度体系_用户视角版.csv'; a.click();
 }
 </script>
-
 </body>
 </html>
