@@ -358,6 +358,7 @@ canvas { width: 100% !important; max-height: 300px; }
     </div>
     <div class="col-selector" id="agreeColSelector"></div>
     <div id="agreeDimensions" style="margin-top:12px;"></div>
+    <div class="table-wrap" id="agreeTableWrap"></div>
   </div>
   <div class="card hidden" id="agreeResultCard">
     <h2>📊 拟合分析结果</h2>
@@ -636,6 +637,7 @@ function loadData(headers, data) {
   renderTable();
   renderManageTable();
   renderAgreeColSelector();
+  renderAgreeTable();
   renderAgreeDimensions();
 }
 
@@ -2217,6 +2219,45 @@ function updateThreshold(val, col) {
 
 // ==================== 多人拟合分析 ====================
 
+// 拟合分析 Tab 数据预览表格
+function renderAgreeTable() {
+  const wrap = document.getElementById('agreeTableWrap');
+  if (!wrap) return;
+  const maxRows = Math.min(rawData.length, 200);
+  let html = '<table><thead><tr>';
+  columns.forEach(col => {
+    const active = agreeSelectedCols.has(col);
+    html += `<th class="${active ? 'selected' : ''}" onclick="toggleAgreeColFromTable('${col.replace(/'/g, "\\'")}')">${escapeHtml(col)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  for (let i = 0; i < maxRows; i++) {
+    html += '<tr>';
+    columns.forEach(col => {
+      const v = rawData[i][col];
+      html += `<td>${v === null || v === undefined ? '' : escapeHtml(String(v))}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (rawData.length > 200) html += `<p style="text-align:center;padding:8px;color:#9ca3af;font-size:12px;">仅显示前 200 行，共 ${rawData.length} 行</p>`;
+  wrap.innerHTML = html;
+}
+
+function toggleAgreeColFromTable(col) {
+  if (agreeSelectedCols.has(col)) { agreeSelectedCols.delete(col); }
+  else { agreeSelectedCols.add(col); }
+  renderAgreeColSelector();
+  updateAgreeTableHighlight();
+  renderAgreeDimensions();
+}
+
+function updateAgreeTableHighlight() {
+  const ths = document.querySelectorAll('#agreeTableWrap th');
+  ths.forEach((th, i) => {
+    th.className = agreeSelectedCols.has(columns[i]) ? 'selected' : '';
+  });
+}
+
 // 自动检测维度：扫描列名，找到 *_组件拟合一致率 和对应的 *_mark_N、*_mark_N_备注
 function detectAgreementDimensions() {
   const dims = {};
@@ -2481,6 +2522,7 @@ function renderAgreeColSelector() {
       const col = columns[idx];
       if (agreeSelectedCols.has(col)) { agreeSelectedCols.delete(col); chip.classList.remove('active'); }
       else { agreeSelectedCols.add(col); chip.classList.add('active'); }
+      updateAgreeTableHighlight();
       renderAgreeDimensions();
     });
   });
@@ -2494,6 +2536,7 @@ function agreeAutoSelect() {
     }
   });
   renderAgreeColSelector();
+  renderAgreeTable();
   renderAgreeDimensions();
 }
 
@@ -2505,12 +2548,14 @@ function agreeSelectAll() {
     agreeSelectedCols.add(col);
   });
   renderAgreeColSelector();
+  renderAgreeTable();
   renderAgreeDimensions();
 }
 
 function agreeDeselectAll() {
   agreeSelectedCols.clear();
   renderAgreeColSelector();
+  renderAgreeTable();
   renderAgreeDimensions();
 }
 
