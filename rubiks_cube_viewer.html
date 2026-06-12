@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>四阶魔方旋转验证器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding: 20px; }
+h1 { text-align: center; margin-bottom: 20px; font-size: 1.6em; color: #fff; }
+.container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.panel { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #0f3460; }
+.panel h2 { font-size: 1.1em; margin-bottom: 12px; color: #e94560; }
+.color-config { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.color-item { display: flex; align-items: center; gap: 6px; }
+.color-item label { font-size: 0.9em; min-width: 55px; }
+.color-item select { flex: 1; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #0f3460; color: #eee; }
+.moves-input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #0f3460; background: #0a1628; color: #eee; font-size: 1.1em; font-family: monospace; margin-bottom: 10px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s; }
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-secondary { background: #0f3460; color: #eee; border: 1px solid #1a4080; }
+.btn-success { background: #2ecc71; color: #fff; }
+.btn-warning { background: #f39c12; color: #fff; }
+.steps-display { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; min-height: 32px; }
+.step-badge { padding: 4px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; font-weight: 600; background: #0f3460; color: #aaa; border: 1px solid #1a4080; }
+.step-badge.done { background: #1a4a2e; color: #2ecc71; border-color: #2ecc71; }
+.step-badge.current { background: #4a3a1a; color: #f39c12; border-color: #f39c12; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+.cube-area { grid-column: 1 / -1; }
+.cube-visual { display: flex; align-items: center; gap: 40px; }
+.cube-3d-container { flex-shrink: 0; width: 280px; height: 320px; perspective: 800px; display: flex; align-items: center; justify-content: center; }
+.cube-3d { width: 160px; height: 160px; position: relative; transform-style: preserve-3d; transform: rotateX(-25deg) rotateY(-35deg); cursor: grab; }
+.cube-3d:active { cursor: grabbing; }
+.cube-3d-face { position: absolute; width: 160px; height: 160px; display: grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(4,1fr); gap: 2px; padding: 3px; border: 1px solid rgba(0,0,0,0.4); backface-visibility: hidden; }
+.cube-3d-face.face3d-F { transform: translateZ(80px); }
+.cube-3d-face.face3d-B { transform: rotateY(180deg) translateZ(80px); }
+.cube-3d-face.face3d-U { transform: rotateX(90deg) translateZ(80px); }
+.cube-3d-face.face3d-D { transform: rotateX(-90deg) translateZ(80px); }
+.cube-3d-face.face3d-R { transform: rotateY(90deg) translateZ(80px); }
+.cube-3d-face.face3d-L { transform: rotateY(-90deg) translateZ(80px); }
+.cube-3d-cell { border-radius: 2px; border: 1px solid rgba(0,0,0,0.3); transition: background-color 0.3s; }
+.cube-3d-label { text-align: center; font-size: 0.75em; color: #888; margin-top: 8px; }
+.cube-net-container { flex: 1; }
+.cube-net { display: grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(3,1fr); gap: 4px; max-width: 520px; }
+.face { display: grid; grid-template-columns: repeat(4,1fr); grid-template-rows: repeat(4,1fr); gap: 2px; padding: 3px; background: #333; border-radius: 6px; aspect-ratio: 1; }
+.face-U { grid-column:2; grid-row:1; } .face-L { grid-column:1; grid-row:2; }
+.face-F { grid-column:2; grid-row:2; } .face-R { grid-column:3; grid-row:2; }
+.face-B { grid-column:4; grid-row:2; } .face-D { grid-column:2; grid-row:3; }
+.cell { border-radius: 3px; border: 1px solid rgba(0,0,0,0.3); transition: background-color 0.3s; }
+.face-wrapper { position: relative; }
+.face-wrapper .label { text-align: center; font-size: 0.75em; color: #aaa; margin-bottom: 2px; font-weight: 600; }
+.result-panel { grid-column: 1 / -1; }
+.result-grid { display: inline-grid; grid-template-columns: repeat(4, 36px); grid-template-rows: repeat(4, 36px); gap: 3px; margin: 10px 0; }
+.result-cell { border-radius: 4px; border: 1px solid rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-size: 0.7em; font-weight: bold; color: rgba(0,0,0,0.6); }
+.result-text { font-family: monospace; font-size: 1em; margin-top: 8px; color: #2ecc71; }
+.face-select { padding: 4px 8px; border-radius: 4px; border: 1px solid #333; background: #0f3460; color: #eee; margin-left: 10px; }
+.query-panel { grid-column: 1 / -1; }
+.query-textarea { width: 100%; min-height: 120px; padding: 12px; border-radius: 8px; border: 1px solid #0f3460; background: #0a1628; color: #eee; font-size: 0.95em; line-height: 1.5; resize: vertical; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.query-textarea::placeholder { color: #555; }
+.query-btn-group { margin-top: 10px; display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<h1>四阶魔方旋转验证器</h1>
+<div class="container">
+  <div class="panel query-panel">
+    <h2>题目输入</h2>
+    <textarea class="query-textarea" id="queryInput" placeholder="将完整题目粘贴到这里，支持四阶魔方（大写=外层，小写=内层第二层）&#10;例如：D', R2, f, u2"></textarea>
+    <div class="query-btn-group">
+      <button class="btn btn-primary" onclick="parseQuery()">解析题目</button>
+      <span id="parseStatus" style="line-height:32px;margin-left:10px;font-size:0.85em;color:#aaa;"></span>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>初始颜色配置</h2>
+    <div class="color-config">
+      <div class="color-item"><label>F (正面):</label><select id="color-F"><option value="green" selected>绿</option><option value="red">红</option><option value="orange">橙</option><option value="blue">蓝</option><option value="yellow">黄</option><option value="white">白</option></select></div>
+      <div class="color-item"><label>B (背面):</label><select id="color-B"><option value="green">绿</option><option value="red">红</option><option value="orange">橙</option><option value="blue" selected>蓝</option><option value="yellow">黄</option><option value="white">白</option></select></div>
+      <div class="color-item"><label>U (顶面):</label><select id="color-U"><option value="green">绿</option><option value="red">红</option><option value="orange">橙</option><option value="blue">蓝</option><option value="yellow" selected>黄</option><option value="white">白</option></select></div>
+      <div class="color-item"><label>D (底面):</label><select id="color-D"><option value="green">绿</option><option value="red">红</option><option value="orange">橙</option><option value="blue">蓝</option><option value="yellow">黄</option><option value="white" selected>白</option></select></div>
+      <div class="color-item"><label>L (左面):</label><select id="color-L"><option value="green">绿</option><option value="red" selected>红</option><option value="orange">橙</option><option value="blue">蓝</option><option value="yellow">黄</option><option value="white">白</option></select></div>
+      <div class="color-item"><label>R (右面):</label><select id="color-R"><option value="green">绿</option><option value="red">红</option><option value="orange" selected>橙</option><option value="blue">蓝</option><option value="yellow">黄</option><option value="white">白</option></select></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>旋转步骤（大写=外层, 小写=内层）</h2>
+    <input type="text" class="moves-input" id="movesInput" placeholder="如: D', R2, f, u2" value="D', R2">
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="parseAndReset()">加载步骤</button>
+      <button class="btn btn-secondary" onclick="stepBack()">← 上一步</button>
+      <button class="btn btn-warning" onclick="stepForward()">下一步 →</button>
+      <button class="btn btn-success" onclick="executeAll()">全部执行</button>
+      <button class="btn btn-secondary" onclick="resetCube()">重置</button>
+    </div>
+    <div class="steps-display" id="stepsDisplay"></div>
+  </div>
+  <div class="panel cube-area">
+    <h2>魔方可视化</h2>
+    <div class="cube-visual">
+      <div class="cube-3d-container"><div>
+        <div class="cube-3d" id="cube3d">
+          <div class="cube-3d-face face3d-F" id="face3d-F"></div>
+          <div class="cube-3d-face face3d-B" id="face3d-B"></div>
+          <div class="cube-3d-face face3d-U" id="face3d-U"></div>
+          <div class="cube-3d-face face3d-D" id="face3d-D"></div>
+          <div class="cube-3d-face face3d-R" id="face3d-R"></div>
+          <div class="cube-3d-face face3d-L" id="face3d-L"></div>
+        </div>
+        <div class="cube-3d-label">拖拽旋转查看各面</div>
+      </div></div>
+      <div class="cube-net-container"><div class="cube-net">
+<!-- PLACEHOLDER_NET -->
+        <div class="face-wrapper face-U"><div class="label">U (顶)</div><div class="face" id="face-U"></div></div>
+        <div class="face-wrapper face-L"><div class="label">L (左)</div><div class="face" id="face-L"></div></div>
+        <div class="face-wrapper face-F"><div class="label">F (正)</div><div class="face" id="face-F"></div></div>
+        <div class="face-wrapper face-R"><div class="label">R (右)</div><div class="face" id="face-R"></div></div>
+        <div class="face-wrapper face-B"><div class="label">B (背)</div><div class="face" id="face-B"></div></div>
+        <div class="face-wrapper face-D"><div class="label">D (底)</div><div class="face" id="face-D"></div></div>
+      </div></div>
+    </div>
+  </div>
+  <div class="panel result-panel">
+    <h2>结果输出 <select class="face-select" id="resultFace" onchange="showResult()">
+      <option value="F">F (正面)</option><option value="B">B (背面)</option>
+      <option value="U">U (顶面)</option><option value="D">D (底面)</option>
+      <option value="L">L (左面)</option><option value="R">R (右面)</option>
+    </select></h2>
+    <div class="result-grid" id="resultGrid"></div>
+    <div class="result-text" id="resultText"></div>
+  </div>
+</div>
+<script>
+const N = 4;
+const COLOR_MAP = {
+  green: { css: '#00d26a', zh: '绿' }, red: { css: '#e74c3c', zh: '红' },
+  orange: { css: '#f39c12', zh: '橙' }, blue: { css: '#3498db', zh: '蓝' },
+  yellow: { css: '#f1c40f', zh: '黄' }, white: { css: '#ecf0f1', zh: '白' },
+};
+let cube = {}, history = [], moves = [], currentStep = 0;
+
+function makeFace(c) { return Array.from({length:N},()=>Array(N).fill(c)); }
+function cloneCube(c) { const n={}; for(const f of 'FBUDLR') n[f]=c[f].map(r=>[...r]); return n; }
+function rotateCW(face) {
+  const n=Array.from({length:N},()=>Array(N).fill(''));
+  for(let i=0;i<N;i++) for(let j=0;j<N;j++) n[j][N-1-i]=face[i][j];
+  return n;
+}
+function initCube() {
+  for(const f of 'FBUDLR') cube[f]=makeFace(document.getElementById('color-'+f).value);
+  history=[cloneCube(cube)]; currentStep=0;
+}
+
+// Outer layer moves
+function moveF(c){c.F=rotateCW(c.F);const t=[...Array(N)].map((_,j)=>c.U[N-1][j]);for(let j=0;j<N;j++)c.U[N-1][j]=c.L[N-1-j][N-1];for(let i=0;i<N;i++)c.L[i][N-1]=c.D[0][i];for(let j=0;j<N;j++)c.D[0][j]=c.R[N-1-j][0];for(let i=0;i<N;i++)c.R[i][0]=t[i];}
+function moveB(c){c.B=rotateCW(c.B);const t=[...Array(N)].map((_,j)=>c.U[0][j]);for(let j=0;j<N;j++)c.U[0][j]=c.R[j][N-1];for(let i=0;i<N;i++)c.R[i][N-1]=c.D[N-1][N-1-i];for(let j=0;j<N;j++)c.D[N-1][j]=c.L[j][0];for(let i=0;i<N;i++)c.L[i][0]=t[N-1-i];}
+function moveU(c){c.U=rotateCW(c.U);const t=[...Array(N)].map((_,j)=>c.F[0][j]);for(let j=0;j<N;j++)c.F[0][j]=c.R[0][j];for(let j=0;j<N;j++)c.R[0][j]=c.B[0][j];for(let j=0;j<N;j++)c.B[0][j]=c.L[0][j];for(let j=0;j<N;j++)c.L[0][j]=t[j];}
+function moveD(c){c.D=rotateCW(c.D);const t=[...Array(N)].map((_,j)=>c.F[N-1][j]);for(let j=0;j<N;j++)c.F[N-1][j]=c.L[N-1][j];for(let j=0;j<N;j++)c.L[N-1][j]=c.B[N-1][j];for(let j=0;j<N;j++)c.B[N-1][j]=c.R[N-1][j];for(let j=0;j<N;j++)c.R[N-1][j]=t[j];}
+function moveR(c){c.R=rotateCW(c.R);const t=[...Array(N)].map((_,i)=>c.U[i][N-1]);for(let i=0;i<N;i++)c.U[i][N-1]=c.F[i][N-1];for(let i=0;i<N;i++)c.F[i][N-1]=c.D[i][N-1];for(let i=0;i<N;i++)c.D[i][N-1]=c.B[N-1-i][0];for(let i=0;i<N;i++)c.B[N-1-i][0]=t[i];}
+function moveL(c){c.L=rotateCW(c.L);const t=[...Array(N)].map((_,i)=>c.U[i][0]);for(let i=0;i<N;i++)c.U[i][0]=c.B[N-1-i][N-1];for(let i=0;i<N;i++)c.B[N-1-i][N-1]=c.D[i][0];for(let i=0;i<N;i++)c.D[i][0]=c.F[i][0];for(let i=0;i<N;i++)c.F[i][0]=t[i];}
+
+// Inner layer moves (second layer, no face rotation)
+function move_f(c){const t=[...Array(N)].map((_,j)=>c.U[N-2][j]);for(let j=0;j<N;j++)c.U[N-2][j]=c.L[N-1-j][N-2];for(let i=0;i<N;i++)c.L[i][N-2]=c.D[1][i];for(let j=0;j<N;j++)c.D[1][j]=c.R[N-1-j][1];for(let i=0;i<N;i++)c.R[i][1]=t[i];}
+function move_b(c){const t=[...Array(N)].map((_,j)=>c.U[1][j]);for(let j=0;j<N;j++)c.U[1][j]=c.R[j][N-2];for(let i=0;i<N;i++)c.R[i][N-2]=c.D[N-2][N-1-i];for(let j=0;j<N;j++)c.D[N-2][j]=c.L[j][1];for(let i=0;i<N;i++)c.L[i][1]=t[N-1-i];}
+function move_u(c){const t=[...Array(N)].map((_,j)=>c.F[1][j]);for(let j=0;j<N;j++)c.F[1][j]=c.R[1][j];for(let j=0;j<N;j++)c.R[1][j]=c.B[1][j];for(let j=0;j<N;j++)c.B[1][j]=c.L[1][j];for(let j=0;j<N;j++)c.L[1][j]=t[j];}
+function move_d(c){const t=[...Array(N)].map((_,j)=>c.F[N-2][j]);for(let j=0;j<N;j++)c.F[N-2][j]=c.L[N-2][j];for(let j=0;j<N;j++)c.L[N-2][j]=c.B[N-2][j];for(let j=0;j<N;j++)c.B[N-2][j]=c.R[N-2][j];for(let j=0;j<N;j++)c.R[N-2][j]=t[j];}
+function move_r(c){const t=[...Array(N)].map((_,i)=>c.U[i][N-2]);for(let i=0;i<N;i++)c.U[i][N-2]=c.F[i][N-2];for(let i=0;i<N;i++)c.F[i][N-2]=c.D[i][N-2];for(let i=0;i<N;i++)c.D[i][N-2]=c.B[N-1-i][1];for(let i=0;i<N;i++)c.B[N-1-i][1]=t[i];}
+function move_l(c){const t=[...Array(N)].map((_,i)=>c.U[i][1]);for(let i=0;i<N;i++)c.U[i][1]=c.B[N-1-i][N-2];for(let i=0;i<N;i++)c.B[N-1-i][N-2]=c.D[i][1];for(let i=0;i<N;i++)c.D[i][1]=c.F[i][1];for(let i=0;i<N;i++)c.F[i][1]=t[i];}
+
+const MOVE_FNS={F:moveF,B:moveB,U:moveU,D:moveD,R:moveR,L:moveL,f:move_f,b:move_b,u:move_u,d:move_d,r:move_r,l:move_l};
+
+function applyMove(c,move){
+  const face=move[0],mod=move.slice(1);
+  if(mod==='2'){MOVE_FNS[face](c);MOVE_FNS[face](c);}
+  else if(mod==="'"){MOVE_FNS[face](c);MOVE_FNS[face](c);MOVE_FNS[face](c);}
+  else MOVE_FNS[face](c);
+}
+function parseMoves(str){
+  str=str.replace(/[''`ʼ]/g,"'");
+  return str.split(/[\s,，、]+/).filter(s=>s.match(/^[FBLRUDfblrud][2']?$/));
+}
+function renderCube(){
+  for(const f of 'FBUDLR'){
+    const el=document.getElementById('face-'+f); el.innerHTML='';
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++){
+      const cell=document.createElement('div'); cell.className='cell';
+      cell.style.backgroundColor=COLOR_MAP[cube[f][i][j]].css; el.appendChild(cell);
+    }
+  }
+  render3DCube();
+}
+function render3DCube(){
+  for(const f of 'FBUDLR'){
+    const el=document.getElementById('face3d-'+f); el.innerHTML='';
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++){
+      const cell=document.createElement('div'); cell.className='cube-3d-cell';
+      cell.style.backgroundColor=COLOR_MAP[cube[f][i][j]].css; el.appendChild(cell);
+    }
+  }
+}
+function renderSteps(){
+  const el=document.getElementById('stepsDisplay'); el.innerHTML='';
+  moves.forEach((m,idx)=>{
+    const b=document.createElement('span'); b.className='step-badge';
+    if(idx<currentStep) b.classList.add('done');
+    else if(idx===currentStep) b.classList.add('current');
+    b.textContent=m; el.appendChild(b);
+  });
+}
+function showResult(){
+  const face=document.getElementById('resultFace').value;
+  const grid=document.getElementById('resultGrid'); grid.innerHTML='';
+  const names=[];
+  for(let i=0;i<N;i++) for(let j=0;j<N;j++){
+    const cell=document.createElement('div'); cell.className='result-cell';
+    const color=cube[face][i][j];
+    cell.style.backgroundColor=COLOR_MAP[color].css;
+    cell.textContent=COLOR_MAP[color].zh; grid.appendChild(cell);
+    names.push(COLOR_MAP[color].zh);
+  }
+  const lines=[];
+  for(let i=0;i<N;i++) lines.push(names.slice(i*N,(i+1)*N).join(' '));
+  document.getElementById('resultText').textContent=`${face}面：\n`+lines.join(' | ');
+}
+function parseQuery(){
+  const text=document.getElementById('queryInput').value;
+  const status=document.getElementById('parseStatus');
+  if(!text.trim()){status.textContent='请先粘贴题目内容';status.style.color='#e94560';return;}
+  const ZH_TO_COLOR={'绿':'green','红':'red','橙':'orange','蓝':'blue','黄':'yellow','白':'white'};
+  let parsed=[];
+  const re=/([FBLRUD])\s*(?:面\s*)?(?:是|为)\s*([绿红橙蓝黄白])(?:色)?/g;
+  let m;
+  while((m=re.exec(text))!==null){
+    if(ZH_TO_COLOR[m[2]]&&!parsed.find(p=>p.face===m[1]))
+      parsed.push({face:m[1],color:ZH_TO_COLOR[m[2]]});
+  }
+  parsed.forEach(({face,color})=>{const s=document.getElementById('color-'+face);if(s)s.value=color;});
+  let movesStr='';
+  const lines=text.split(/\n/);
+  for(const line of lines){
+    if(line.match(/^\s*\d+\.\s*[FBLRUDfblrud]\s*[：:]/)) continue;
+    if(line.match(/表示|逆时针|顺时针|旋转\d+度|仅转动/)) continue;
+    const seq=line.match(/([FBLRUDfblrud][2''’]?\s*[,，、\s]\s*(?:[FBLRUDfblrud][2''’]?\s*[,，、\s]\s*)*[FBLRUDfblrud][2''’`]?)/);
+    if(seq&&seq[0].length>movesStr.length) movesStr=seq[0];
+  }
+  if(!movesStr){
+    const op=text.match(/(?:操作|执行|步骤)[：:：]?\s*\n?\s*([FBLRUDfblrud][2''’]?(?:\s*[,，、\s]\s*[FBLRUDfblrud][2''’]?)*)/);
+    if(op) movesStr=op[1];
+  }
+  if(movesStr){
+    movesStr=movesStr.replace(/[''`ʼ’]/g,"'").replace(/[，、]/g,',');
+    document.getElementById('movesInput').value=movesStr;
+  }
+  const rfm=text.match(/([FBLRUD])\s*面\s*[）)]*\s*(?:\d+个)?(?:方块|格子|色块|位置)?的?颜色/);
+  if(rfm) document.getElementById('resultFace').value=rfm[1];
+  const info=[];
+  if(parsed.length>0) info.push(`识别${parsed.length}个面颜色`);
+  if(movesStr) info.push('识别操作序列');
+  if(rfm) info.push('目标面:'+rfm[1]);
+  if(info.length>0){status.textContent='✓ '+info.join(' | ');status.style.color='#2ecc71';parseAndReset();}
+  else{status.textContent='未能识别，请手动配置';status.style.color='#f39c12';}
+}
+function parseAndReset(){moves=parseMoves(document.getElementById('movesInput').value);initCube();renderCube();renderSteps();showResult();}
+function stepForward(){if(currentStep>=moves.length)return;applyMove(cube,moves[currentStep]);currentStep++;history.push(cloneCube(cube));renderCube();renderSteps();showResult();}
+function stepBack(){if(currentStep<=0)return;currentStep--;history.pop();cube=cloneCube(history[history.length-1]);renderCube();renderSteps();showResult();}
+function executeAll(){while(currentStep<moves.length){applyMove(cube,moves[currentStep]);currentStep++;history.push(cloneCube(cube));}renderCube();renderSteps();showResult();}
+function resetCube(){initCube();currentStep=0;renderCube();renderSteps();showResult();}
+parseAndReset();
+(function(){
+  const el=document.getElementById('cube3d');let drag=false,rx=-25,ry=-35,sx,sy;
+  el.addEventListener('mousedown',e=>{drag=true;sx=e.clientX;sy=e.clientY;e.preventDefault();});
+  document.addEventListener('mousemove',e=>{if(!drag)return;ry+=((e.clientX-sx)*0.6);rx-=((e.clientY-sy)*0.6);el.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`;sx=e.clientX;sy=e.clientY;});
+  document.addEventListener('mouseup',()=>{drag=false;});
+  el.addEventListener('touchstart',e=>{drag=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY;e.preventDefault();});
+  el.addEventListener('touchmove',e=>{if(!drag)return;ry+=(e.touches[0].clientX-sx)*0.6;rx-=(e.touches[0].clientY-sy)*0.6;el.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`;sx=e.touches[0].clientX;sy=e.touches[0].clientY;});
+  el.addEventListener('touchend',()=>{drag=false;});
+})();
+</script>
+</body>
+</html>
