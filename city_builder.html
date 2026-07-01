@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>城市建造 - 交互式地块规划工具</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#333;padding:15px;user-select:none}
+h1{text-align:center;margin-bottom:12px;font-size:20px}
+.layout{display:flex;gap:20px;flex-wrap:wrap}
+.panel{background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:12px}
+.grid-panel{flex:0 0 auto}
+.tools-panel{flex:0 0 200px}
+.view-panel{flex:1;min-width:500px}
+table{border-collapse:collapse}
+table td{width:42px;height:42px;border:1px solid #ccc;text-align:center;font-size:10px;position:relative;cursor:pointer;vertical-align:middle}
+table td:hover{background:#e8f5e9}
+table td.occupied{cursor:default}
+table td.stacked{background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(0,0,0,0.05) 3px,rgba(0,0,0,0.05) 6px) !important}
+table th{width:42px;height:28px;font-size:12px;color:#666;text-align:center;font-weight:normal}
+.cell-label{font-size:9px;color:#999;position:absolute;bottom:1px;right:2px}
+.cell-height{font-size:10px;font-weight:bold;color:#333}
+.building-btn{display:flex;align-items:center;gap:6px;padding:8px 10px;margin-bottom:6px;border:2px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px;transition:all 0.2s}
+.building-btn:hover{border-color:#999;background:#f0f0f0}
+.building-btn.selected{border-color:#333;background:#e8f5e9;box-shadow:0 0 0 2px rgba(76,175,80,0.3)}
+.building-btn .color-dot{width:16px;height:16px;border-radius:3px;flex-shrink:0}
+.section-title{font-size:13px;font-weight:bold;margin-bottom:8px;color:#555}
+.btn-row{margin-top:10px;display:flex;gap:8px}
+.btn-row button{padding:8px 14px;border:none;border-radius:5px;cursor:pointer;font-size:13px}
+.btn-generate{background:#4CAF50;color:#fff}
+.btn-generate:hover{background:#45a049}
+.btn-clear{background:#f44336;color:#fff}
+.btn-clear:hover{background:#d32f2f}
+.btn-erase{background:#ff9800;color:#fff}
+.btn-erase:hover{background:#f57c00}
+.btn-erase.active{box-shadow:0 0 0 3px rgba(255,152,0,0.4)}
+.input-panel{width:100%;margin-bottom:15px;background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:12px}
+.input-panel textarea{width:100%;height:100px;background:#fff;color:#333;border:1px solid #ccc;border-radius:4px;padding:8px;font-size:12px;resize:vertical;font-family:monospace}
+.input-panel button{margin-top:8px;padding:6px 14px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px}
+.input-panel button:hover{background:#1976D2}
+.input-panel .hint{margin-top:6px}
+#c3d{border:1px solid #ddd;border-radius:6px;cursor:grab;display:block;margin-bottom:10px}
+#c3d:active{cursor:grabbing}
+.views{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.views canvas{border:1px solid #ddd;border-radius:4px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:11px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px}
+.hint{font-size:11px;color:#888;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>🏙️ 城市建造 - 交互式地块规划</h1>
+
+<div class="input-panel">
+  <div class="section-title">题目输入（自动解析建筑与坐标）：</div>
+  <textarea id="questionInput" placeholder="粘贴题目信息，例如：
+在地块5-9,5-10,6-9,6-10有一栋8米高的别墅。楼顶位于5-9处有一个11米高的信号塔
+在地块1-2,1-3,2-2,2-3有一栋18米高的医院
+在地块2-5,2-6,2-7,3-5,3-6,3-7有一栋31米高的住宅楼
+在地块7-2,7-3,7-4,8-2,8-3,8-4有一栋11米高的商场
+在地块3-2,3-3,4-2,4-3,5-2,5-3,6-2,6-3有一栋9米高的学校"></textarea>
+  <button onclick="parseQuestion()">解析题目</button>
+  <span class="hint" id="parseResult"></span>
+</div>
+
+<div class="layout">
+
+<div class="panel tools-panel">
+  <div class="section-title">建筑元素：</div>
+  <div id="tools"></div>
+  <div class="btn-row">
+    <button class="btn-erase" id="btnErase" onclick="toggleErase()">橡皮擦</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn-generate" onclick="generate3D()">生成3D</button>
+    <button class="btn-clear" onclick="clearAll()">清空</button>
+  </div>
+  <div class="hint">点击建筑→点击格子放置<br>支持拖拽连续放置</div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<div class="panel grid-panel">
+  <div class="section-title">地块规划（10×10）：</div>
+  <table id="grid"></table>
+</div>
+
+<div class="panel view-panel">
+  <div class="section-title">3D预览：</div>
+  <canvas id="c3d" width="600" height="380"></canvas>
+  <div class="section-title">三视图：</div>
+  <div class="views">
+    <canvas id="cFront" width="280" height="170"></canvas>
+    <canvas id="cLeft" width="280" height="170"></canvas>
+    <canvas id="cRight" width="280" height="170"></canvas>
+  </div>
+</div>
+
+</div>
+<script>
+var GRID=10;
+var buildingTypes=[
+  {id:'villa',name:'别墅',height:8,base:0,color:'#4CAF50'},
+  {id:'tower',name:'信号塔',height:11,base:8,color:'#9E9E9E'},
+  {id:'hospital',name:'医院',height:18,base:0,color:'#F44336'},
+  {id:'apartment',name:'住宅楼',height:31,base:0,color:'#9C27B0'},
+  {id:'mall',name:'商场',height:11,base:0,color:'#FFEB3B'},
+  {id:'school',name:'学校',height:9,base:0,color:'#FF9800'}
+];
+
+var grid=[];// grid[row][col]=[{typeId,color,height,base,name}, ...] 支持堆叠
+var selectedType=null;
+var eraseMode=false;
+var mouseDown=false;
+
+// 初始化网格数据
+for(var r=0;r<GRID;r++){grid[r]=[];for(var c=0;c<GRID;c++)grid[r][c]=[];}
+
+// 生成工具栏
+var toolsEl=document.getElementById('tools');
+buildingTypes.forEach(function(bt){
+  var d=document.createElement('div');
+  d.className='building-btn';
+  d.id='btn-'+bt.id;
+  d.innerHTML='<div class="color-dot" style="background:'+bt.color+'"></div>'+bt.name+'('+(bt.base+bt.height)+'m)';
+  d.onclick=function(){selectTool(bt);};
+  toolsEl.appendChild(d);
+});
+
+// 图例
+var legEl=document.getElementById('legend');
+buildingTypes.forEach(function(bt){
+  legEl.innerHTML+='<span><i style="background:'+bt.color+'"></i>'+bt.name+'('+(bt.base+bt.height)+'m)</span>';
+});
+
+function selectTool(bt){
+  eraseMode=false;
+  document.getElementById('btnErase').classList.remove('active');
+  if(selectedType&&selectedType.id===bt.id){selectedType=null;}
+  else{selectedType=bt;}
+  document.querySelectorAll('.building-btn').forEach(function(el){el.classList.remove('selected');});
+  if(selectedType)document.getElementById('btn-'+bt.id).classList.add('selected');
+}
+
+function toggleErase(){
+  eraseMode=!eraseMode;
+  selectedType=null;
+  document.querySelectorAll('.building-btn').forEach(function(el){el.classList.remove('selected');});
+  document.getElementById('btnErase').classList.toggle('active',eraseMode);
+}
+
+// 生成表格
+var tableEl=document.getElementById('grid');
+var headerRow=document.createElement('tr');
+headerRow.innerHTML='<th></th>';
+for(var c=1;c<=GRID;c++)headerRow.innerHTML+='<th>'+c+'</th>';
+tableEl.appendChild(headerRow);
+
+for(var r=1;r<=GRID;r++){
+  var tr=document.createElement('tr');
+  tr.innerHTML='<th>'+r+'</th>';
+  for(var c=1;c<=GRID;c++){
+    var td=document.createElement('td');
+    td.dataset.row=r;td.dataset.col=c;
+    td.innerHTML='<span class="cell-label">'+r+'-'+c+'</span>';
+    td.addEventListener('mousedown',function(e){mouseDown=true;paintCell(this);e.preventDefault();});
+    td.addEventListener('mouseenter',function(){if(mouseDown)paintCell(this);});
+    tr.appendChild(td);
+  }
+  tableEl.appendChild(tr);
+}
+document.addEventListener('mouseup',function(){mouseDown=false;});
+
+function getTopHeight(r,c){
+  var arr=grid[r][c];if(!arr||arr.length===0)return 0;
+  var top=0;arr.forEach(function(item){var t=item.base+item.height;if(t>top)top=t;});
+  return top;
+}
+function getTotalDisplay(r,c){
+  var arr=grid[r][c];if(!arr||arr.length===0)return '';
+  return getTopHeight(r,c)+'米';
+}
+function getTopColor(r,c){
+  var arr=grid[r][c];if(!arr||arr.length===0)return '';
+  var top=arr[arr.length-1];return top.color+'44';
+}
+
+function paintCell(td){
+  var r=parseInt(td.dataset.row)-1,c=parseInt(td.dataset.col)-1;
+  if(eraseMode){
+    grid[r][c]=[];
+    td.style.background='';
+    td.innerHTML='<span class="cell-label">'+td.dataset.row+'-'+td.dataset.col+'</span>';
+    td.classList.remove('occupied');
+    return;
+  }
+  if(!selectedType)return;
+  var currentTop=getTopHeight(r,c);
+  var base=selectedType.base;
+  if(base===0&&currentTop>0)base=currentTop;
+  grid[r][c].push({typeId:selectedType.id,color:selectedType.color,height:selectedType.height,base:base,name:selectedType.name});
+  var totalH=getTopHeight(r,c);
+  td.style.background=getTopColor(r,c);
+  td.innerHTML='<span class="cell-height">'+totalH+'米</span><span class="cell-label">'+td.dataset.row+'-'+td.dataset.col+'</span>';
+  td.classList.add('occupied');
+}
+
+function clearAll(){
+  for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)grid[r][c]=[];
+  document.querySelectorAll('#grid td[data-row]').forEach(function(td){
+    td.style.background='';td.classList.remove('occupied');
+    td.innerHTML='<span class="cell-label">'+td.dataset.row+'-'+td.dataset.col+'</span>';
+  });
+}
+
+// === 题目解析 ===
+var defaultColors=['#4CAF50','#9E9E9E','#F44336','#9C27B0','#FFEB3B','#FF9800','#00BCD4','#E91E63','#3F51B5','#8BC34A'];
+
+function parseQuestion(){
+  var text=document.getElementById('questionInput').value.trim();
+  if(!text){document.getElementById('parseResult').textContent='请输入题目内容';return;}
+
+  // 解析建筑信息
+  var parsed=[];
+  var colorIdx=0;
+  // 匹配模式：地块X-Y,X-Y... N米高的 名称 / 楼顶位于X-Y处有一个N米高的名称
+  var lines=text.split(/[。\n]/);
+  lines.forEach(function(line){
+    line=line.trim();if(!line)return;
+    // 匹配"楼顶位于X-Y处有一个N米高的XXX"
+    var m2=line.match(/楼顶位于([\d\-,\s]+)处.*?(\d+)米高的(.+)/);
+    if(m2){
+      var blocks2=m2[1].match(/\d+-\d+/g)||[];
+      var height2=parseInt(m2[2]);
+      var name2=m2[3].trim();
+      // base = 找到该地块上已有建筑的高度（从已解析的建筑中计算）
+      var base2=0;
+      blocks2.forEach(function(b){
+        var parts=b.split('-');var rr=parseInt(parts[0])-1,cc=parseInt(parts[1])-1;
+        if(grid[rr]&&grid[rr][cc]&&grid[rr][cc].length>0){
+          base2=getTopHeight(rr,cc);
+        } else {
+          parsed.forEach(function(prev){
+            prev.blocks.forEach(function(pb){
+              if(pb===b){var t=prev.base+prev.height;if(t>base2)base2=t;}
+            });
+          });
+        }
+      });
+      parsed.push({name:name2,height:height2,base:base2,blocks:blocks2,color:defaultColors[colorIdx%defaultColors.length]});
+      colorIdx++;
+      return;
+    }
+    // 匹配"地块X-Y,X-Y... N米高的XXX"
+    var m1=line.match(/地块([\d\-,\s]+).*?(\d+)米高的(.+)/);
+    if(m1){
+      var blocks1=m1[1].match(/\d+-\d+/g)||[];
+      var height1=parseInt(m1[2]);
+      var name1=m1[3].trim();
+      parsed.push({name:name1,height:height1,base:0,blocks:blocks1,color:defaultColors[colorIdx%defaultColors.length]});
+      colorIdx++;
+    }
+  });
+
+  if(parsed.length===0){document.getElementById('parseResult').textContent='未解析到建筑信息，请检查格式';return;}
+
+  // 更新建筑类型列表
+  buildingTypes=[];
+  parsed.forEach(function(p){
+    buildingTypes.push({id:'type'+buildingTypes.length,name:p.name,height:p.height,base:p.base,color:p.color});
+  });
+
+  // 重建工具栏
+  var toolsEl=document.getElementById('tools');
+  toolsEl.innerHTML='';
+  buildingTypes.forEach(function(bt){
+    var d=document.createElement('div');
+    d.className='building-btn';d.id='btn-'+bt.id;
+    d.innerHTML='<div class="color-dot" style="background:'+bt.color+'"></div>'+bt.name+'('+(bt.base+bt.height)+'m)';
+    d.onclick=function(){selectTool(bt);};
+    toolsEl.appendChild(d);
+  });
+
+  // 重建图例
+  var legEl=document.getElementById('legend');legEl.innerHTML='';
+  buildingTypes.forEach(function(bt){
+    legEl.innerHTML+='<span><i style="background:'+bt.color+'"></i>'+bt.name+'('+(bt.base+bt.height)+'m)</span>';
+  });
+
+  // 清空网格并填入数据
+  clearAll();
+  parsed.forEach(function(p){
+    p.blocks.forEach(function(b){
+      var parts=b.split('-');var rr=parseInt(parts[0])-1,cc=parseInt(parts[1])-1;
+      if(rr<0||rr>=GRID||cc<0||cc>=GRID)return;
+      grid[rr][cc].push({typeId:'',color:p.color,height:p.height,base:p.base,name:p.name});
+      var td=document.querySelector('#grid td[data-row="'+(rr+1)+'"][data-col="'+(cc+1)+'"]');
+      if(td){
+        td.style.background=p.color+'44';
+        var totalH=getTopHeight(rr,cc);
+        td.innerHTML='<span class="cell-height">'+totalH+'米</span><span class="cell-label">'+(rr+1)+'-'+(cc+1)+'</span>';
+        td.classList.add('occupied');
+        if(grid[rr][cc].length>1)td.classList.add('stacked');
+      }
+    });
+  });
+
+  document.getElementById('parseResult').textContent='✓ 解析成功：'+parsed.length+'个建筑，已填入网格';
+  generate3D();
+}
+
+// === 3D渲染 ===
+var angleX=0.6,angleY=2.5,zoom3=14,HS=0.22;
+var drag3=false,lmx=0,lmy=0;
+
+function proj(x,y,z,W,H){
+  var cY=Math.cos(angleY),sY=Math.sin(angleY),cX=Math.cos(angleX),sX=Math.sin(angleX);
+  var px=x*cY-z*sY,pz=x*sY+z*cY,py=y*cX-pz*sX;pz=y*sX+pz*cX;
+  var s=200/(pz/zoom3+6);
+  return{x:W/2+px*s,y:H/2+50-py*s,z:pz};
+}
+function shade(hex,f){
+  var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return'rgb('+Math.floor(r*f)+','+Math.floor(g*f)+','+Math.floor(b*f)+')';
+}
+function drawBox(ctx,W,H,col,row,base,height,color){
+  var cx=col-GRID/2-0.5,cz=row-GRID/2-0.5,s=0.85;
+  var v=[[cx-s/2,base*HS,cz-s/2],[cx+s/2,base*HS,cz-s/2],[cx+s/2,base*HS,cz+s/2],[cx-s/2,base*HS,cz+s/2],
+         [cx-s/2,(base+height)*HS,cz-s/2],[cx+s/2,(base+height)*HS,cz-s/2],[cx+s/2,(base+height)*HS,cz+s/2],[cx-s/2,(base+height)*HS,cz+s/2]];
+  var pv=v.map(function(pt){return proj(pt[0],pt[1],pt[2],W,H);});
+  var faces=[{i:[4,5,6,7],sh:1.0},{i:[0,1,5,4],sh:0.7},{i:[1,2,6,5],sh:0.85},{i:[2,3,7,6],sh:0.6},{i:[3,0,4,7],sh:0.75}];
+  faces.sort(function(a,b){var za=0,zb=0;a.i.forEach(function(i){za+=pv[i].z;});b.i.forEach(function(i){zb+=pv[i].z;});return zb-za;});
+  faces.forEach(function(f){
+    ctx.beginPath();ctx.moveTo(pv[f.i[0]].x,pv[f.i[0]].y);
+    for(var k=1;k<4;k++)ctx.lineTo(pv[f.i[k]].x,pv[f.i[k]].y);
+    ctx.closePath();ctx.fillStyle=shade(color,f.sh);ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=0.5;ctx.stroke();
+  });
+}
+
+function render3D(){
+  var c=document.getElementById('c3d'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
+  // 地面网格
+  ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=0.5;
+  for(var i=0;i<=GRID;i++){
+    var p1=proj(i-GRID/2-0.5,0,-GRID/2-0.5,W,H),p2=proj(i-GRID/2-0.5,0,GRID/2-0.5,W,H);
+    ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+    p1=proj(-GRID/2-0.5,0,i-GRID/2-0.5,W,H);p2=proj(GRID/2-0.5,0,i-GRID/2-0.5,W,H);
+    ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+  }
+  // 列标签（前方底边，从左到右1-10）
+  ctx.fillStyle='#333';ctx.font='bold 9px sans-serif';ctx.textAlign='center';
+  for(var col=1;col<=GRID;col++){var pl=proj(col-GRID/2-0.5,-0.1,-GRID/2-0.5-0.5,W,H);ctx.fillText(''+col,pl.x,pl.y);}
+  // 排标签（左侧，从上到下1-10）
+  ctx.textAlign='right';
+  for(var row=1;row<=GRID;row++){var pr=proj(-GRID/2-0.5-0.5,-0.1,row-GRID/2-0.5,W,H);ctx.fillText(''+(GRID-row+1),pr.x,pr.y);}
+  // 轴名
+  ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
+  var pCol=proj(0,-0.3,-GRID/2-0.5-1.2,W,H);ctx.fillText('列 →',pCol.x,pCol.y);
+  ctx.textAlign='right';
+  var pRow=proj(-GRID/2-0.5-1.2,-0.3,GRID/2-0.5,W,H);ctx.fillText('↓ 排',pRow.x,pRow.y);
+  // 建筑（不再画格子坐标文字，保持清爽）
+  var all=[];
+  for(var r=0;r<GRID;r++)for(var c2=0;c2<GRID;c2++){
+    if(!grid[r][c2]||grid[r][c2].length===0)continue;
+    grid[r][c2].forEach(function(g){
+      var rz=GRID-r;
+      var p=proj((c2+1)-GRID/2-0.5,(g.base+g.height/2)*HS,rz-GRID/2-0.5,W,H);
+      all.push({col:c2+1,rz:rz,base:g.base,height:g.height,color:g.color,z:p.z});
+    });
+  }
+  all.sort(function(a,b){return b.z-a.z;});
+  all.forEach(function(bx){drawBox(ctx,W,H,bx.col,bx.rz,bx.base,bx.height,bx.color);});
+}
+
+function renderView(id,title,getData){
+  var c=document.getElementById(id),ctx=c.getContext('2d'),W=c.width,H=c.height;
+  ctx.fillStyle='#f9f9f9';ctx.fillRect(0,0,W,H);
+  var data=getData(),maxH=0;
+  var minIdx=data.length,maxIdx=0;
+  data.forEach(function(d,i){if(d.h>0){if(i<minIdx)minIdx=i;if(i>maxIdx)maxIdx=i;if(d.h>maxH)maxH=d.h;}});
+  if(maxH===0)return;
+  minIdx=Math.max(0,minIdx-1);maxIdx=Math.min(data.length-1,maxIdx+1);
+  var count=maxIdx-minIdx+1,barW=(W-55)/count,barMaxH=H-45;
+  ctx.strokeStyle='#aaa';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(38,H-28);ctx.lineTo(W-8,H-28);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(38,H-28);ctx.lineTo(38,8);ctx.stroke();
+  ctx.fillStyle='#333';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText(title,W/2,12);
+  var step=Math.ceil(maxH/4);
+  ctx.fillStyle='#666';ctx.font='9px sans-serif';ctx.textAlign='right';
+  for(var h=0;h<=maxH;h+=step){var yy=H-28-(h/maxH)*barMaxH;ctx.fillText(h+'m',34,yy+3);}
+  for(var idx=minIdx;idx<=maxIdx;idx++){
+    var d=data[idx],di=idx-minIdx,x=42+di*barW;
+    ctx.fillStyle='#555';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText(d.label,x+(barW-3)/2,H-15);
+    if(d.h===0)continue;
+    var bh=(d.h/maxH)*barMaxH;
+    ctx.fillStyle=d.color;ctx.fillRect(x,H-28-bh,barW-3,bh);
+    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=0.5;ctx.strokeRect(x,H-28-bh,barW-3,bh);
+    ctx.fillStyle='#333';ctx.font='8px sans-serif';ctx.fillText(d.h+'m',x+(barW-3)/2,H-28-bh-3);
+  }
+}
+
+function generate3D(){
+  render3D();
+  renderView('cFront','正视图（从南往北看，列1→10）',function(){
+    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
+    for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[c].h){g[c]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
+    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+  });
+  renderView('cLeft','左视图（从西往东看，排1→10）',function(){
+    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
+    for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[r].h){g[r]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
+    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+  });
+  renderView('cRight','右视图（从东往西看，排1→10）',function(){
+    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
+    for(var r=0;r<GRID;r++)for(var c=GRID-1;c>=0;c--){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[r].h){g[r]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
+    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+  });
+}
+
+// 3D视图拖拽
+var c3d=document.getElementById('c3d');
+c3d.addEventListener('mousedown',function(e){drag3=true;lmx=e.clientX;lmy=e.clientY;e.preventDefault();});
+document.addEventListener('mouseup',function(){drag3=false;});
+document.addEventListener('mousemove',function(e){
+  if(!drag3)return;
+  angleY-=(e.clientX-lmx)*0.01;angleX-=(e.clientY-lmy)*0.01;
+  angleX=Math.max(-1.2,Math.min(1.2,angleX));
+  lmx=e.clientX;lmy=e.clientY;render3D();
+});
+c3d.addEventListener('wheel',function(e){e.preventDefault();zoom3+=e.deltaY*0.02;zoom3=Math.max(8,Math.min(40,zoom3));render3D();},{passive:false});
+
+render3D();
+</script>
+</body>
+</html>
