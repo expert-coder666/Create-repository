@@ -55,6 +55,14 @@ table th{width:42px;height:28px;font-size:12px;color:#666;text-align:center;font
 <div class="input-panel">
   <div class="section-title">题目输入（自动解析建筑与坐标）：</div>
   <textarea id="questionInput" placeholder="粘贴题目信息，例如：
+颜色说明：
+🟩=别墅 8m=2格
+📡=信号塔 11m=3格
+🟥=医院 18m=4格
+🟪=住宅楼 31m=8格
+🟨=商场 11m=3格
+🟧=学校 9m=2格
+
 在地块5-9,5-10,6-9,6-10有一栋8米高的别墅。楼顶位于5-9处有一个11米高的信号塔
 在地块1-2,1-3,2-2,2-3有一栋18米高的医院
 在地块2-5,2-6,2-7,3-5,3-6,3-7有一栋31米高的住宅楼
@@ -90,15 +98,16 @@ table th{width:42px;height:28px;font-size:12px;color:#666;text-align:center;font
   <canvas id="c3d" width="600" height="380"></canvas>
   <div class="section-title">三视图：</div>
   <div class="views">
-    <canvas id="cFront" width="280" height="170"></canvas>
-    <canvas id="cLeft" width="280" height="170"></canvas>
-    <canvas id="cRight" width="280" height="170"></canvas>
+    <canvas id="cFront" width="320" height="320"></canvas>
+    <canvas id="cLeft" width="320" height="320"></canvas>
+    <canvas id="cRight" width="320" height="320"></canvas>
   </div>
 </div>
 
 </div>
 <script>
 var GRID=10;
+var gridScale=4; // 每格代表的米数，用于三视图
 var buildingTypes=[
   {id:'villa',name:'别墅',height:8,base:0,color:'#4CAF50'},
   {id:'tower',name:'信号塔',height:11,base:8,color:'#9E9E9E'},
@@ -215,10 +224,31 @@ function clearAll(){
 
 // === 题目解析 ===
 var defaultColors=['#4CAF50','#9E9E9E','#F44336','#9C27B0','#FFEB3B','#FF9800','#00BCD4','#E91E63','#3F51B5','#8BC34A'];
+var buildingIcons={}; // name -> icon emoji
+var buildingGrids={}; // name -> {height, grids}
 
 function parseQuestion(){
   var text=document.getElementById('questionInput').value.trim();
   if(!text){document.getElementById('parseResult').textContent='请输入题目内容';return;}
+
+  // 先解析颜色说明/图标映射：匹配 "emoji=名称 Nm=N格"
+  buildingIcons={};buildingGrids={};
+  var iconLines=text.match(/(.+?)[=＝](.+?)\s+(\d+)m[=＝](\d+)格/g);
+  if(iconLines){
+    iconLines.forEach(function(line){
+      var m=line.match(/(.+?)[=＝](.+?)\s+(\d+)m[=＝](\d+)格/);
+      if(m){
+        var icon=m[1].trim(),name=m[2].trim(),h=parseInt(m[3]),grids=parseInt(m[4]);
+        buildingIcons[name]=icon;
+        buildingGrids[name]={height:h,grids:grids};
+      }
+    });
+  }
+  // 从图标映射中计算gridScale
+  var scaleEntries=Object.values(buildingGrids);
+  if(scaleEntries.length>0){
+    gridScale=scaleEntries[0].height/scaleEntries[0].grids;
+  }
 
   // 解析建筑信息
   var parsed=[];
@@ -306,8 +336,28 @@ function parseQuestion(){
   });
 
   document.getElementById('parseResult').textContent='✓ 解析成功：'+parsed.length+'个建筑，已填入网格';
+  // 计算gridScale：根据题目信息确定每格代表几米
+  if(!buildingGrids||Object.keys(buildingGrids).length===0){
+    // 没有从图标行解析到，尝试其他方式
+    var scaleMatch=text.match(/(\d+)m\s*[=＝]\s*(\d+)格/);
+    if(scaleMatch){
+      gridScale=parseInt(scaleMatch[1])/parseInt(scaleMatch[2]);
+    } else {
+      var heights=[];
+      parsed.forEach(function(p){heights.push(p.height);});
+      if(heights.length>0){
+        var gcdVal=heights[0];
+        for(var gi=1;gi<heights.length;gi++){gcdVal=gcd(gcdVal,heights[gi]);}
+        var maxTotal=0;parsed.forEach(function(p){var t=p.base+p.height;if(t>maxTotal)maxTotal=t;});
+        while(maxTotal/gcdVal>40&&gcdVal<maxTotal){gcdVal*=2;}
+        gridScale=gcdVal;
+      }
+    }
+  }
   generate3D();
 }
+
+function gcd(a,b){while(b){var t=b;b=a%b;a=t;}return a;}
 
 // === 3D渲染 ===
 var angleX=0.6,angleY=2.5,zoom3=14,HS=0.22;
@@ -344,22 +394,22 @@ function render3D(){
   // 地面网格
   ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=0.5;
   for(var i=0;i<=GRID;i++){
-    var p1=proj(i-GRID/2-0.5,0,-GRID/2-0.5,W,H),p2=proj(i-GRID/2-0.5,0,GRID/2-0.5,W,H);
+    var p1=proj(i-GRID/2,0,-GRID/2,W,H),p2=proj(i-GRID/2,0,GRID/2,W,H);
     ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
-    p1=proj(-GRID/2-0.5,0,i-GRID/2-0.5,W,H);p2=proj(GRID/2-0.5,0,i-GRID/2-0.5,W,H);
+    p1=proj(-GRID/2,0,i-GRID/2,W,H);p2=proj(GRID/2,0,i-GRID/2,W,H);
     ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
   }
   // 列标签（前方底边，从左到右1-10）
   ctx.fillStyle='#333';ctx.font='bold 9px sans-serif';ctx.textAlign='center';
-  for(var col=1;col<=GRID;col++){var pl=proj(col-GRID/2-0.5,-0.1,-GRID/2-0.5-0.5,W,H);ctx.fillText(''+col,pl.x,pl.y);}
+  for(var col=1;col<=GRID;col++){var pl=proj(col-GRID/2-0.5,-0.1,-GRID/2-0.5,W,H);ctx.fillText(''+col,pl.x,pl.y);}
   // 排标签（左侧，从上到下1-10）
   ctx.textAlign='right';
-  for(var row=1;row<=GRID;row++){var pr=proj(-GRID/2-0.5-0.5,-0.1,row-GRID/2-0.5,W,H);ctx.fillText(''+(GRID-row+1),pr.x,pr.y);}
+  for(var row=1;row<=GRID;row++){var pr=proj(-GRID/2-0.5,-0.1,row-GRID/2-0.5,W,H);ctx.fillText(''+(GRID-row+1),pr.x,pr.y);}
   // 轴名
   ctx.fillStyle='#555';ctx.font='10px sans-serif';ctx.textAlign='center';
-  var pCol=proj(0,-0.3,-GRID/2-0.5-1.2,W,H);ctx.fillText('列 →',pCol.x,pCol.y);
+  var pCol=proj(0,-0.3,-GRID/2-1,W,H);ctx.fillText('列 →',pCol.x,pCol.y);
   ctx.textAlign='right';
-  var pRow=proj(-GRID/2-0.5-1.2,-0.3,GRID/2-0.5,W,H);ctx.fillText('↓ 排',pRow.x,pRow.y);
+  var pRow=proj(-GRID/2-1,-0.3,GRID/2-0.5,W,H);ctx.fillText('↓ 排',pRow.x,pRow.y);
   // 建筑（不再画格子坐标文字，保持清爽）
   var all=[];
   for(var r=0;r<GRID;r++)for(var c2=0;c2<GRID;c2++){
@@ -377,46 +427,140 @@ function render3D(){
 function renderView(id,title,getData){
   var c=document.getElementById(id),ctx=c.getContext('2d'),W=c.width,H=c.height;
   ctx.fillStyle='#f9f9f9';ctx.fillRect(0,0,W,H);
-  var data=getData(),maxH=0;
-  var minIdx=data.length,maxIdx=0;
-  data.forEach(function(d,i){if(d.h>0){if(i<minIdx)minIdx=i;if(i>maxIdx)maxIdx=i;if(d.h>maxH)maxH=d.h;}});
+  var data=getData();
+  // data数组: [{segments:[{h,color,name},...], label}]
+  // 找最大总高度（米）
+  var maxH=0;
+  data.forEach(function(d){var t=0;d.segments.forEach(function(seg){t+=seg.h;});if(t>maxH)maxH=t;});
   if(maxH===0)return;
-  minIdx=Math.max(0,minIdx-1);maxIdx=Math.min(data.length-1,maxIdx+1);
-  var count=maxIdx-minIdx+1,barW=(W-55)/count,barMaxH=H-45;
-  ctx.strokeStyle='#aaa';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(38,H-28);ctx.lineTo(W-8,H-28);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(38,H-28);ctx.lineTo(38,8);ctx.stroke();
-  ctx.fillStyle='#333';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText(title,W/2,12);
-  var step=Math.ceil(maxH/4);
-  ctx.fillStyle='#666';ctx.font='9px sans-serif';ctx.textAlign='right';
-  for(var h=0;h<=maxH;h+=step){var yy=H-28-(h/maxH)*barMaxH;ctx.fillText(h+'m',34,yy+3);}
-  for(var idx=minIdx;idx<=maxIdx;idx++){
-    var d=data[idx],di=idx-minIdx,x=42+di*barW;
-    ctx.fillStyle='#555';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText(d.label,x+(barW-3)/2,H-15);
-    if(d.h===0)continue;
-    var bh=(d.h/maxH)*barMaxH;
-    ctx.fillStyle=d.color;ctx.fillRect(x,H-28-bh,barW-3,bh);
-    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=0.5;ctx.strokeRect(x,H-28-bh,barW-3,bh);
-    ctx.fillStyle='#333';ctx.font='8px sans-serif';ctx.fillText(d.h+'m',x+(barW-3)/2,H-28-bh-3);
+  // 转为格子数
+  var maxGridH=Math.ceil(maxH/gridScale);
+  // 标题
+  ctx.fillStyle='#333';ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillText(title,W/2,14);
+  // 网格模式：每列显示为一列色块，每个色块代表gridScale米
+  var cellSize=Math.min(Math.floor((W-50)/data.length),Math.floor((H-50)/maxGridH));
+  cellSize=Math.min(cellSize,16);
+  var totalW=data.length*cellSize,totalH=maxGridH*cellSize;
+  var startX=(W-totalW)/2,startY=H-25-totalH;
+  // 画网格背景
+  ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.lineWidth=0.5;
+  for(var i=0;i<=data.length;i++){ctx.beginPath();ctx.moveTo(startX+i*cellSize,startY);ctx.lineTo(startX+i*cellSize,startY+totalH);ctx.stroke();}
+  for(var j=0;j<=maxGridH;j++){ctx.beginPath();ctx.moveTo(startX,startY+j*cellSize);ctx.lineTo(startX+totalW,startY+j*cellSize);ctx.stroke();}
+  // 画色块（从底部往上，每格=gridScale米）
+  data.forEach(function(d,colIdx){
+    var x=startX+colIdx*cellSize;
+    var currentGrid=0;
+    d.segments.forEach(function(seg){
+      var grids=Math.round(seg.h/gridScale);
+      var icon=buildingIcons[seg.name]||'';
+      for(var m=0;m<grids;m++){
+        var y=startY+totalH-(currentGrid+m+1)*cellSize;
+        ctx.fillStyle=seg.color;
+        ctx.fillRect(x+0.5,y+0.5,cellSize-1,cellSize-1);
+        if(icon){
+          ctx.font=Math.floor(cellSize*0.7)+'px sans-serif';
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(icon,x+cellSize/2,y+cellSize/2);
+        }
+      }
+      currentGrid+=grids;
+    });
+  });
+  // X轴标签
+  ctx.fillStyle='#555';ctx.font='9px sans-serif';ctx.textAlign='center';
+  data.forEach(function(d,i){ctx.fillText(d.label,startX+i*cellSize+cellSize/2,startY+totalH+12);});
+  // Y轴高度标签（每5格标一次）
+  ctx.textAlign='right';
+  var labelStep=Math.max(1,Math.floor(maxGridH/5));
+  for(var h=0;h<=maxGridH;h+=labelStep){
+    var yy=startY+totalH-h*cellSize;
+    ctx.fillText((h*gridScale)+'m',startX-4,yy+3);
   }
 }
 
 function generate3D(){
   render3D();
+  // 正视图：从南往北看（观察者在排10，看向排1），每列显示从前到后逐层遮挡
   renderView('cFront','正视图（从南往北看，列1→10）',function(){
-    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
-    for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[c].h){g[c]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
-    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+    var g=[];for(var i=0;i<GRID;i++)g.push({segments:[]});
+    for(var c=0;c<GRID;c++){
+      // 从排10（最前）到排1（最后），逐层收集可见部分
+      var visibleH=0; // 已被前方建筑遮挡的高度
+      var segs=[];
+      for(var r=GRID-1;r>=0;r--){
+        if(grid[r][c].length===0)continue;
+        var cellTop=getTopHeight(r,c);
+        if(cellTop>visibleH){
+          // 这个格子有部分露出来，收集超出visibleH的部分
+          var cellBase=0;
+          grid[r][c].forEach(function(item){
+            var itemTop=item.base+item.height;
+            if(itemTop>visibleH){
+              var drawBase=Math.max(item.base,visibleH);
+              var drawH=itemTop-drawBase;
+              if(drawH>0)segs.push({h:drawH,color:item.color,name:item.name,base:drawBase});
+            }
+          });
+          visibleH=cellTop;
+        }
+      }
+      // 按base排序确保从低到高
+      segs.sort(function(a,b){return a.base-b.base;});
+      g[c].segments=segs;
+    }
+    return g.map(function(x,i){return{segments:x.segments,label:''+(i+1)};});
   });
+  // 左视图：从西往东看（观察者在列1，看向列10），每排显示从前到后
   renderView('cLeft','左视图（从西往东看，排1→10）',function(){
-    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
-    for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[r].h){g[r]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
-    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+    var g=[];for(var i=0;i<GRID;i++)g.push({segments:[]});
+    for(var r=0;r<GRID;r++){
+      var visibleH=0;
+      var segs=[];
+      for(var c=0;c<GRID;c++){
+        if(grid[r][c].length===0)continue;
+        var cellTop=getTopHeight(r,c);
+        if(cellTop>visibleH){
+          grid[r][c].forEach(function(item){
+            var itemTop=item.base+item.height;
+            if(itemTop>visibleH){
+              var drawBase=Math.max(item.base,visibleH);
+              var drawH=itemTop-drawBase;
+              if(drawH>0)segs.push({h:drawH,color:item.color,name:item.name,base:drawBase});
+            }
+          });
+          visibleH=cellTop;
+        }
+      }
+      segs.sort(function(a,b){return a.base-b.base;});
+      g[r].segments=segs;
+    }
+    return g.map(function(x,i){return{segments:x.segments,label:''+(i+1)};});
   });
+  // 右视图：从东往西看（观察者在列10，看向列1），每排显示从前到后
   renderView('cRight','右视图（从东往西看，排1→10）',function(){
-    var g=[];for(var i=0;i<GRID;i++)g.push({h:0,color:'#000'});
-    for(var r=0;r<GRID;r++)for(var c=GRID-1;c>=0;c--){if(grid[r][c].length>0){var t=getTopHeight(r,c);if(t>g[r].h){g[r]={h:t,color:grid[r][c][grid[r][c].length-1].color};}}}
-    return g.map(function(x,i){return{h:x.h,color:x.color,label:''+(i+1)};});
+    var g=[];for(var i=0;i<GRID;i++)g.push({segments:[]});
+    for(var r=0;r<GRID;r++){
+      var visibleH=0;
+      var segs=[];
+      for(var c=GRID-1;c>=0;c--){
+        if(grid[r][c].length===0)continue;
+        var cellTop=getTopHeight(r,c);
+        if(cellTop>visibleH){
+          grid[r][c].forEach(function(item){
+            var itemTop=item.base+item.height;
+            if(itemTop>visibleH){
+              var drawBase=Math.max(item.base,visibleH);
+              var drawH=itemTop-drawBase;
+              if(drawH>0)segs.push({h:drawH,color:item.color,name:item.name,base:drawBase});
+            }
+          });
+          visibleH=cellTop;
+        }
+      }
+      segs.sort(function(a,b){return a.base-b.base;});
+      g[r].segments=segs;
+    }
+    return g.reverse().map(function(x,i){return{segments:x.segments,label:''+(GRID-i)};});
   });
 }
 
