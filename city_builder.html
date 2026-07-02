@@ -560,7 +560,9 @@ function generate3D(){
       segs.sort(function(a,b){return a.base-b.base;});
       g[r].segments=segs;
     }
-    return g.reverse().map(function(x,i){return{segments:x.segments,label:''+(GRID-i)};});
+    var result=g.map(function(x,i){return{segments:x.segments,label:''+(i+1)};});
+    result.reverse();
+    return result;
   });
 }
 
