@@ -536,8 +536,8 @@ function generate3D(){
     }
     return g.map(function(x,i){return{segments:x.segments,label:''+(i+1)};});
   });
-  // 右视图：从东往西看（观察者在列10，看向列1），每排显示从前到后
-  renderView('cRight','右视图（从东往西看，排1→10）',function(){
+  // 右视图：从东往西看（观察者在列10，看向列1），最右边为第一排
+  renderView('cRight','右视图（从东往西看，排10→1）',function(){
     var g=[];for(var i=0;i<GRID;i++)g.push({segments:[]});
     for(var r=0;r<GRID;r++){
       var visibleH=0;
@@ -560,8 +560,8 @@ function generate3D(){
       segs.sort(function(a,b){return a.base-b.base;});
       g[r].segments=segs;
     }
-    var result=g.map(function(x,i){return{segments:x.segments,label:''+(i+1)};});
-    result.reverse();
+    var result=[];
+    for(var i=GRID-1;i>=0;i--){result.push({segments:g[i].segments,label:''+(i+1)});}
     return result;
   });
 }
