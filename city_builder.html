@@ -224,16 +224,28 @@ function clearAll(){
 
 // === 题目解析 ===
 var defaultColors=['#4CAF50','#9E9E9E','#F44336','#9C27B0','#FFEB3B','#FF9800','#00BCD4','#E91E63','#3F51B5','#8BC34A'];
-// 色块 emoji → hex 颜色，尽量与题目给定色块保持一致
-var emojiColorMap={
-  '🟥':'#F44336','🟧':'#FF9800','🟨':'#FFEB3B','🟩':'#4CAF50','🟦':'#2196F3',
-  '🟪':'#9C27B0','🟫':'#795548','⬛':'#424242','⬜':'#BDBDBD',
-  '🔴':'#F44336','🟠':'#FF9800','🟡':'#FFEB3B','🟢':'#4CAF50','🔵':'#2196F3','🟣':'#9C27B0','🟤':'#795548','⚫':'#424242','⚪':'#E0E0E0'
-};
+// 通过把色块 emoji 渲染到 canvas 采样真实像素颜色，确保 3D/网格颜色与题目输入的色块一致
+var _emojiCanvas=document.createElement('canvas');_emojiCanvas.width=32;_emojiCanvas.height=32;
+var _emojiCtx=_emojiCanvas.getContext('2d',{willReadFrequently:true});
+function _hex2(v){var s=v.toString(16);return s.length<2?'0'+s:s;}
+function iconToColor(icon){
+  if(!icon)return null;
+  _emojiCtx.clearRect(0,0,32,32);
+  _emojiCtx.font='26px "Apple Color Emoji","Segoe UI Emoji",sans-serif';
+  _emojiCtx.textAlign='center';_emojiCtx.textBaseline='middle';
+  _emojiCtx.fillText(icon,16,16);
+  var d;try{d=_emojiCtx.getImageData(0,0,32,32).data;}catch(e){return null;}
+  var r=0,g=0,b=0,n=0;
+  for(var i=0;i<d.length;i+=4){
+    if(d[i+3]>128){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
+  }
+  if(n<8)return null;
+  return '#'+_hex2(Math.round(r/n))+_hex2(Math.round(g/n))+_hex2(Math.round(b/n));
+}
 function colorFromIcon(name,fallback){
   var ic=buildingIcons[name];
-  if(ic&&emojiColorMap[ic])return emojiColorMap[ic];
-  return fallback;
+  var c=iconToColor(ic);
+  return c||fallback;
 }
 var buildingIcons={}; // name -> icon emoji
 var buildingGrids={}; // name -> {height, grids}
