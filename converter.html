@@ -104,6 +104,42 @@ tbody tr:nth-child(even):hover { background: #faf5ff; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .toolbar .spacer { flex: 1; }
 
+/* 字段选择 */
+.field-panel {
+  margin-bottom: 16px; padding: 14px 16px;
+  background: #faf5ff; border: 1px solid #ede9fe; border-radius: 10px;
+}
+.field-panel .field-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.field-panel .field-title { font-size: 14px; font-weight: 600; color: #5a4fcf; }
+.field-panel .field-actions { display: flex; gap: 8px; }
+.field-panel .mini-btn {
+  padding: 3px 12px; border: 1px solid #c4b5fd; border-radius: 14px;
+  background: #fff; color: #7c3aed; font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.field-panel .mini-btn:hover { background: #7c3aed; color: #fff; }
+.field-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.field-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border: 2px solid #e5e7eb; border-radius: 16px;
+  background: #fff; color: #6b7280; font-size: 13px; cursor: pointer;
+  transition: all 0.15s; user-select: none; max-width: 240px;
+}
+.field-chip .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-chip:hover { border-color: #a78bfa; }
+.field-chip.active { border-color: #7c3aed; background: #7c3aed; color: #fff; }
+.field-chip .only-link {
+  font-size: 11px; padding: 1px 6px; border-radius: 8px;
+  background: rgba(124,58,237,0.12); color: #7c3aed;
+}
+.field-chip.active .only-link { background: rgba(255,255,255,0.25); color: #fff; }
+.field-chip .only-link:hover { background: #059669; color: #fff; }
+
+/* 单列查看时允许换行 */
+table.single-col td, table.single-col th { white-space: normal; word-break: break-word; }
+table.single-col td { max-width: 900px; }
+
 .hidden { display: none !important; }
 
 /* 响应式 */
@@ -134,6 +170,7 @@ tbody tr:nth-child(even):hover { background: #faf5ff; }
   <div class="card hidden" id="dataCard">
     <h2>📋 数据预览</h2>
     <div class="info-bar" id="infoBar"></div>
+    <div class="field-panel" id="fieldPanel"></div>
     <div class="toolbar">
       <button class="btn btn-outline" onclick="resetAll()">重新上传</button>
       <div class="spacer"></div>
@@ -160,6 +197,7 @@ tbody tr:nth-child(even):hover { background: #faf5ff; }
 // ==================== 全局状态 ====================
 let rawData = [];
 let columns = [];
+let visibleColumns = [];
 let inputFormat = '';
 let selectedFormat = '';
 let originalFileName = 'data';
@@ -376,6 +414,7 @@ function parseJSONL(text) {
 // ==================== 加载数据 ====================
 function loadData(headers, data) {
   columns = headers.filter(h => h.trim());
+  visibleColumns = [...columns];
   rawData = data;
   selectedFormat = '';
 
@@ -389,20 +428,68 @@ function loadData(headers, data) {
     `<span class="info-tag rows">📊 ${rawData.length} 行 × ${columns.length} 列</span>` +
     `<span class="info-tag size">📄 ${originalFileName}</span>`;
 
+  renderFieldSelector();
   renderTable();
   resetFormatSelection();
+}
+
+// ==================== 字段选择 ====================
+function renderFieldSelector() {
+  const panel = document.getElementById('fieldPanel');
+  let html = '<div class="field-head">' +
+    `<span class="field-title">🏷️ 字段（${visibleColumns.length}/${columns.length}）</span>` +
+    '<div class="field-actions">' +
+    '<button class="mini-btn" onclick="showAllFields()">全选</button>' +
+    '</div></div><div class="field-chips">';
+  columns.forEach((col, idx) => {
+    const active = visibleColumns.includes(col);
+    html += `<span class="field-chip${active ? ' active' : ''}" onclick="toggleField(${idx})" title="${esc(col)}">` +
+      `<span class="chip-name">${esc(col)}</span>` +
+      `<span class="only-link" onclick="onlyField(event,${idx})">只看</span>` +
+      '</span>';
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function toggleField(idx) {
+  const col = columns[idx];
+  if (visibleColumns.includes(col)) {
+    if (visibleColumns.length === 1) return; // 至少保留一列
+    visibleColumns = visibleColumns.filter(c => c !== col);
+  } else {
+    // 按原始列顺序插入
+    visibleColumns = columns.filter(c => visibleColumns.includes(c) || c === col);
+  }
+  renderFieldSelector();
+  renderTable();
+}
+
+function onlyField(event, idx) {
+  event.stopPropagation();
+  visibleColumns = [columns[idx]];
+  renderFieldSelector();
+  renderTable();
+}
+
+function showAllFields() {
+  visibleColumns = [...columns];
+  renderFieldSelector();
+  renderTable();
 }
 
 // ==================== 表格渲染 ====================
 function renderTable() {
   const wrap = document.getElementById('tableWrap');
+  const cols = visibleColumns.length ? visibleColumns : columns;
   const maxRows = Math.min(rawData.length, 100);
-  let html = '<table><thead><tr>';
-  columns.forEach(col => { html += `<th>${esc(col)}</th>`; });
+  const single = cols.length === 1 ? ' class="single-col"' : '';
+  let html = '<table' + single + '><thead><tr>';
+  cols.forEach(col => { html += `<th>${esc(col)}</th>`; });
   html += '</tr></thead><tbody>';
   for (let i = 0; i < maxRows; i++) {
     html += '<tr>';
-    columns.forEach(col => {
+    cols.forEach(col => {
       const v = rawData[i][col];
       html += `<td>${esc(v == null ? '' : String(v))}</td>`;
     });
@@ -554,6 +641,7 @@ function downloadBlob(text, filename, mime) {
 function resetAll() {
   rawData = [];
   columns = [];
+  visibleColumns = [];
   inputFormat = '';
   selectedFormat = '';
   fileInput.value = '';
