@@ -57,6 +57,12 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 .tool-stat { display:flex; align-items:center; justify-content:space-between; background:#fff; border:1px solid #eef0f3; border-radius:8px; padding:8px 12px; }
 .tool-stat .tn { font-size:13px; color:#374151; font-weight:600; }
 .tool-stat .tc { font-size:13px; color:#d97706; font-weight:700; }
+/* 类型筛选条 */
+.filter-bar { display:flex; gap:8px; flex-wrap:wrap; padding:14px 20px 0; }
+.filter-chip { padding:5px 16px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; cursor:pointer; font-size:13px; font-weight:600; color:#6b7280; transition:all .15s; }
+.filter-chip:hover { border-color:#a78bfa; color:#7c3aed; }
+.filter-chip.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+.filter-chip .fc-n { opacity:.7; font-weight:500; margin-left:4px; }
 .wrap { padding:16px 20px 40px; max-width:960px; }
 .welcome { padding:60px 30px; text-align:center; color:#9ca3af; }
 .welcome .big { font-size:40px; margin-bottom:14px; }
@@ -121,7 +127,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 const store = new Map();        // relPath -> File
 const parsedCache = new Map();  // relPath -> parsed JSON
 const openFolders = new Set();  // 用户手动折叠的文件夹（默认展开）
-let curPath = null, curAgent = null;
+let curPath = null, curAgent = null, curFilter = 'all';
 const AGENT_KEYS = ['main_agent','sub_agent','others'];
 
 function esc(s){ const d=document.createElement('div'); d.textContent = s==null?'':String(s); return d.innerHTML; }
@@ -237,7 +243,7 @@ function toggleFolder(row){
 }
 // ============ 选择并解析文件 ============
 async function selectFile(path){
-  curPath=path; curAgent=null;
+  curPath=path; curAgent=null; curFilter='all';
   document.querySelectorAll('.file-row').forEach(r=>r.classList.toggle('active', r.dataset.path===path));
   let data=parsedCache.get(path);
   if(!data){
@@ -273,7 +279,43 @@ function renderMain(data){
     renderStats(data)+
     `<div class="meta">${metaHtml}</div>`+
     `<div class="controls"><button class="ctrl-btn" onclick="expandAll()">全部展开</button><button class="ctrl-btn" onclick="collapseAll()">全部折叠</button></div>`+
-    `<div class="wrap">${renderMessages(run)}</div>`;
+    renderFilterBar(run)+
+    `<div class="wrap" id="msgList">${renderMessages(run)}</div>`;
+}
+
+const FILTERS=[['all','全部'],['user','user'],['think','think'],['tool_use','tool_use'],['tool_response','tool_response'],['text','text']];
+function msgFacetCount(run,f){
+  let n=0;
+  (run.messages||[]).forEach(m=>{ if(matchFilter(m,f)) n++; });
+  return n;
+}
+function renderFilterBar(run){
+  return '<div class="filter-bar">'+FILTERS.map(([k,label])=>{
+    const cnt = k==='all' ? (run.messages||[]).length : msgFacetCount(run,k);
+    return `<div class="filter-chip ${k===curFilter?'active':''}" data-f="${k}" onclick="setFilter('${k}')">${esc(label)}<span class="fc-n">${cnt}</span></div>`;
+  }).join('')+'</div>';
+}
+function curRunObj(){
+  const data=parsedCache.get(curPath); if(!data) return null;
+  const r=agentRuns(data).find(x=>x.id===curAgent); return r?r.run:null;
+}
+function setFilter(f){
+  curFilter=f;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.toggle('active', c.dataset.f===f));
+  const run=curRunObj();
+  if(run) document.getElementById('msgList').innerHTML=renderMessages(run);
+}
+
+function matchFilter(m,f){
+  const r=m.role;
+  if(f==='all') return true;
+  if(f==='user') return r==='user';
+  if(f==='tool_response') return r==='tool';
+  if(r!=='assistant') return false;
+  if(f==='think') return !!(m.reasoning_content && String(m.reasoning_content).trim());
+  if(f==='tool_use') return (m.tool_calls||[]).length>0;
+  if(f==='text'){ const c=typeof m.content==='string'?m.content:(m.content!=null?JSON.stringify(m.content):''); return !!(c&&c.trim()); }
+  return false;
 }
 
 function switchAgent(id){ curAgent=id; renderMain(parsedCache.get(curPath)); }
@@ -353,21 +395,29 @@ function firstLine(s,n){ s=(s||'').replace(/\s+/g,' ').trim(); return s.length>n
 function prettyArgs(a){ if(a==null)return''; if(typeof a==='string'){try{return JSON.stringify(JSON.parse(a),null,2);}catch(e){return a;}} try{return JSON.stringify(a,null,2);}catch(e){return String(a);} }
 
 function renderMessages(run){
-  return run.messages.map((m,i)=>{
+  const out=[];
+  (run.messages||[]).forEach((m,i)=>{
+    if(!matchFilter(m,curFilter)) return;
     const role=m.role||''; const isSys=role==='system'; const isErr=!!m.is_error;
+    const f=curFilter;
     let body='';
-    const content = typeof m.content==='string'? m.content : JSON.stringify(m.content,null,2);
-    if(content){ const mono=role==='tool'||isSys; body+=`<div class="content ${mono?'mono':''}">${esc(content)}</div>`; }
-    if(m.reasoning_content){ body+=`<div class="section"><div class="section-head" onclick="this.nextElementSibling.classList.toggle('hidden')">💭 思考过程 ▾</div><div class="reasoning">${esc(m.reasoning_content)}</div></div>`; }
-    if(m.tool_calls && m.tool_calls.length){
+    const content = typeof m.content==='string'? m.content : (m.content!=null?JSON.stringify(m.content,null,2):'');
+    const showContent = (f==='all'||f==='user'||f==='text'||f==='tool_response');
+    const showReason  = (f==='all'||f==='think');
+    const showTools   = (f==='all'||f==='tool_use');
+    if(showContent && content){ const mono=role==='tool'||isSys; body+=`<div class="content ${mono?'mono':''}">${esc(content)}</div>`; }
+    if(showReason && m.reasoning_content){ body+=`<div class="section"><div class="section-head" onclick="this.nextElementSibling.classList.toggle('hidden')">💭 思考过程 ▾</div><div class="reasoning">${esc(m.reasoning_content)}</div></div>`; }
+    if(showTools && m.tool_calls && m.tool_calls.length){
       body+=`<div class="section"><div class="section-head" onclick="this.nextElementSibling.classList.toggle('hidden')">🔧 工具调用 (${m.tool_calls.length}) ▾</div><div>`;
       m.tool_calls.forEach(tc=>{ const fn=tc.function||{}; body+=`<div class="tool-call"><div class="tc-name">${esc(fn.name||tc.type||'tool')}</div><div class="tc-args">${esc(prettyArgs(fn.arguments))}</div>`+(tc.id?`<div class="tc-id">${esc(tc.id)}</div>`:'')+`</div>`; });
       body+=`</div></div>`;
     }
-    if(m.tool_call_id){ body+=`<div class="kv" style="margin-top:8px;">↳ tool_call_id: ${esc(m.tool_call_id)}</div>`; }
+    if((f==='all'||f==='tool_response') && m.tool_call_id){ body+=`<div class="kv" style="margin-top:8px;">↳ tool_call_id: ${esc(m.tool_call_id)}</div>`; }
     const title=firstLine(content,90);
-    return `<div class="msg role-${esc(role)} ${isErr?'is-error':''} ${isSys?'collapsed':''}"><div class="msg-head" onclick="this.parentElement.classList.toggle('collapsed')"><span class="idx">#${i}</span>${roleBadge(role)}${isErr?'<span class="badge b-error">error</span>':''}<span class="msg-title">${esc(title)}</span><span class="toggle-ico">▾</span></div><div class="msg-body">${body||'<span class="kv">（空）</span>'}</div></div>`;
-  }).join('');
+    const collapsed = (isSys && f==='all') ? 'collapsed' : '';
+    out.push(`<div class="msg role-${esc(role)} ${isErr?'is-error':''} ${collapsed}"><div class="msg-head" onclick="this.parentElement.classList.toggle('collapsed')"><span class="idx">#${i}</span>${roleBadge(role)}${isErr?'<span class="badge b-error">error</span>':''}<span class="msg-title">${esc(title)}</span><span class="toggle-ico">▾</span></div><div class="msg-body">${body||'<span class="kv">（空）</span>'}</div></div>`);
+  });
+  return out.length ? out.join('') : '<div class="welcome" style="padding:40px;">该类型下暂无消息</div>';
 }
 function expandAll(){ document.querySelectorAll('.msg').forEach(m=>m.classList.remove('collapsed')); }
 function collapseAll(){ document.querySelectorAll('.msg').forEach(m=>m.classList.add('collapsed')); }
