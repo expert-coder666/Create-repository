@@ -14,6 +14,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 .sidebar-head h1 { font-size:16px; color:#5a4fcf; margin-bottom:10px; }
 .pick-btn { display:block; width:100%; padding:9px 12px; border:none; border-radius:8px; background:#7c3aed; color:#fff; font-size:13px; font-weight:600; cursor:pointer; text-align:center; }
 .pick-btn:hover { background:#6d28d9; }
+.share-btn { margin-top:8px; background:#059669; }
+.share-btn:hover { background:#047857; }
 .drop-hint { margin-top:8px; font-size:11px; color:#9ca3af; text-align:center; }
 .search { margin-top:10px; width:100%; padding:7px 10px; border:1px solid #e5e7eb; border-radius:7px; font-size:12px; }
 .search:focus { outline:none; border-color:#a78bfa; }
@@ -112,11 +114,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 <body>
 <div class="sidebar">
   <div class="sidebar-head">
-    <h1>🧭 轨迹查看器</h1>
-    <button class="pick-btn" onclick="document.getElementById('dirInput').click()">📁 选择数据文件夹</button>
-    <input type="file" id="dirInput" webkitdirectory directory multiple style="display:none">
-    <div class="drop-hint">或把文件 / 文件夹拖到下方列表</div>
-    <input type="text" class="search" id="search" placeholder="🔎 过滤路径…" oninput="renderTree()">
+    <h1 id="sideTitle">🧭 轨迹查看器</h1>
+    <div id="editControls">
+      <button class="pick-btn" onclick="document.getElementById('dirInput').click()">📁 选择数据文件夹</button>
+      <input type="file" id="dirInput" webkitdirectory directory multiple style="display:none">
+      <div class="drop-hint">或把文件 / 文件夹拖到下方列表</div>
+      <button class="pick-btn share-btn" id="shareBtn" onclick="makeShareVersion()">🔗 生成分享版（内嵌数据+题目列表）</button>
+    </div>
+    <input type="text" class="search" id="search" placeholder="🔎 过滤题目…" oninput="renderTree()">
     <div class="count" id="count"></div>
   </div>
   <div class="tree" id="tree"><div class="empty-side">尚未加载数据<br>点击上方按钮选择文件夹</div></div>
@@ -125,12 +130,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
   <div class="welcome"><div class="big">🧭</div>选择左侧的一个轨迹文件开始查看</div>
 </div>
 
+<script id="payload" type="application/octet-stream">__PAYLOAD__</script>
 <script>
 // ============ 状态 ============
-const store = new Map();        // relPath -> File
+const store = new Map();        // relPath -> File | {__text}
 const parsedCache = new Map();  // relPath -> parsed JSON
 const openFolders = new Set();  // 用户手动折叠的文件夹（默认展开）
 let curPath = null, curAgent = null, curFilter = 'all';
+let SHARE_MODE = false;
 const AGENT_KEYS = ['main_agent','sub_agent','others'];
 
 function esc(s){ const d=document.createElement('div'); d.textContent = s==null?'':String(s); return d.innerHTML; }
@@ -142,6 +149,7 @@ document.getElementById('dirInput').addEventListener('change', e=>{
 });
 
 function addFiles(items){
+  if(SHARE_MODE) return;
   let added=0;
   items.forEach(({file,path})=>{
     if(!isTraj(path)) return;
@@ -154,7 +162,7 @@ function addFiles(items){
 }
 
 function updateCount(){
-  document.getElementById('count').textContent = store.size ? `已加载 ${store.size} 个 JSON 文件` : '';
+  document.getElementById('count').textContent = store.size ? (SHARE_MODE?`共 ${store.size} 个题目/轨迹`:`已加载 ${store.size} 个 JSON 文件`) : '';
 }
 
 // ---- 拖拽（支持文件夹递归）----
@@ -250,9 +258,12 @@ async function selectFile(path){
   document.querySelectorAll('.file-row').forEach(r=>r.classList.toggle('active', r.dataset.path===path));
   let data=parsedCache.get(path);
   if(!data){
-    const file=store.get(path);
+    const entry=store.get(path);
     document.getElementById('mainPane').innerHTML='<div class="welcome"><div class="big">⏳</div>解析中…</div>';
-    try{ data=JSON.parse(await file.text()); parsedCache.set(path,data); }
+    try{
+      const text = (entry && entry.__text!=null) ? entry.__text : await entry.text();
+      data=JSON.parse(text); parsedCache.set(path,data);
+    }
     catch(e){ document.getElementById('mainPane').innerHTML='<div class="welcome"><div class="big">⚠️</div>解析失败: '+esc(e.message)+'</div>'; return; }
   }
   renderMain(data);
@@ -437,6 +448,56 @@ function renderMessages(run){
 }
 function expandAll(){ document.querySelectorAll('.msg').forEach(m=>m.classList.remove('collapsed')); }
 function collapseAll(){ document.querySelectorAll('.msg').forEach(m=>m.classList.add('collapsed')); }
+
+// ============ 分享 / 嵌入模式 ============
+let PRISTINE_HTML='';
+function b64encodeUtf8(str){
+  const bytes=new TextEncoder().encode(str); let bin=''; const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){ bin+=String.fromCharCode.apply(null, bytes.subarray(i,i+chunk)); }
+  return btoa(bin);
+}
+function b64decodeUtf8(b64){
+  const bin=atob(b64); const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+async function makeShareVersion(){
+  if(!store.size){ alert('请先加载数据，再生成分享版'); return; }
+  const btn=document.getElementById('shareBtn'); const old=btn.textContent; btn.textContent='⏳ 打包中…';
+  try{
+    const bundle={};
+    for(const [path,entry] of store){
+      bundle[path] = (entry && entry.__text!=null) ? entry.__text : await entry.text();
+    }
+    const b64=b64encodeUtf8(JSON.stringify(bundle));
+    const html=PRISTINE_HTML.replace('__PAY'+'LOAD__', b64);
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='轨迹查看器_分享版.html'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    btn.textContent='✅ 已生成，去下载'; setTimeout(()=>btn.textContent=old,2500);
+  }catch(e){ alert('生成失败: '+e.message); btn.textContent=old; }
+}
+function loadEmbedded(b64){
+  let bundle;
+  try{ bundle=JSON.parse(b64decodeUtf8(b64)); }catch(e){ alert('嵌入数据解析失败: '+e.message); return; }
+  Object.keys(bundle).forEach(path=>{
+    store.set(path, {__text:bundle[path]});
+    try{ parsedCache.set(path, JSON.parse(bundle[path])); }catch(e){}
+  });
+  document.getElementById('sideTitle').textContent='📋 题目列表';
+  const ec=document.getElementById('editControls'); if(ec) ec.style.display='none';
+  renderTree(); updateCount();
+  const first=[...store.keys()].sort()[0];
+  if(first) selectFile(first);
+}
+function initApp(){
+  const pe=document.getElementById('payload');
+  const txt=pe?pe.textContent.trim():'';
+  if(txt && txt!=='__PAY'+'LOAD__'){ SHARE_MODE=true; loadEmbedded(txt); }
+  else { PRISTINE_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML; }
+}
+initApp();
 </script>
 </body>
 </html>
