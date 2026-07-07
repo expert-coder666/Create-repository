@@ -108,20 +108,25 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 .arg-val { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; color:#374151; background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:8px 10px; }
 .tc-id { font-size:11px; color:#9ca3af; font-family:ui-monospace,monospace; margin-top:4px; }
 .kv { font-size:11px; color:#9ca3af; }
-/* 独立模块：prompt / 最终产出 */
-.mod-wrap { margin:14px 20px 0; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; max-width:960px; }
-.mod-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; font-size:13px; font-weight:700; }
-.mod-head .mh-l { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mod-box { padding:14px; background:#fff; max-height:460px; overflow:auto; }
+/* 视图切换 */
+.view-tabs { display:flex; gap:8px; margin:8px 0; }
+.view-tab { padding:5px 14px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; cursor:pointer; font-size:13px; font-weight:600; color:#6b7280; }
+.view-tab:hover { border-color:#a78bfa; color:#7c3aed; }
+.view-tab.active { background:#7c3aed; border-color:#7c3aed; color:#fff; }
+/* Prompt · 剧本 左右对照页 */
+.compare { display:flex; gap:16px; padding:16px 20px; height:calc(100vh - 84px); }
+.compare .col { flex:1; min-width:0; display:flex; flex-direction:column; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; background:#fff; }
+.compare .col-head { flex:none; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; font-size:13px; font-weight:700; border-bottom:1px solid #eef0f3; }
+.compare .col-head .mh-l { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.compare .col-body { flex:1; overflow:auto; padding:16px; }
+.compare .col.mod-prompt { border-color:#c7d2fe; }
+.compare .col.mod-prompt .col-head { background:#eef2ff; color:#3730a3; }
+.compare .col.mod-final { border-color:#fcd34d; }
+.compare .col.mod-final .col-head { background:#fffbeb; color:#92400e; }
 .copy-btn { flex:none; font-size:11px; padding:3px 10px; border-radius:6px; background:#fff; cursor:pointer; }
-.mod-final { border-color:#fcd34d; }
-.mod-final .mod-head { background:#fffbeb; color:#92400e; }
-.mod-final .copy-btn { border:1px solid #fcd34d; color:#92400e; }
-.mod-final .copy-btn:hover { background:#fffbeb; }
-.mod-prompt { border-color:#c7d2fe; }
-.mod-prompt .mod-head { background:#eef2ff; color:#3730a3; }
 .mod-prompt .copy-btn { border:1px solid #c7d2fe; color:#3730a3; }
-.mod-prompt .copy-btn:hover { background:#eef2ff; }
+.mod-final .copy-btn { border:1px solid #fcd34d; color:#92400e; }
+.copy-btn:hover { filter:brightness(0.97); }
 .hidden { display:none !important; }
 </style>
 </head>
@@ -150,7 +155,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 const store = new Map();        // relPath -> File | {__text}
 const parsedCache = new Map();  // relPath -> parsed JSON
 const openFolders = new Set();  // 用户手动折叠的文件夹（默认展开）
-let curPath = null, curAgent = null, curFilter = 'all';
+let curPath = null, curAgent = null, curFilter = 'all', curView = 'compare';
 let SHARE_MODE = false;
 const AGENT_KEYS = ['main_agent','sub_agent','others'];
 
@@ -313,10 +318,26 @@ function agentRuns(data){
   return out;
 }
 
+function viewTabsHtml(){
+  return `<div class="view-tabs">`+
+    `<button class="view-tab ${curView==='compare'?'active':''}" onclick="setView('compare')">📋 Prompt · 剧本对照</button>`+
+    `<button class="view-tab ${curView==='detail'?'active':''}" onclick="setView('detail')">🔍 轨迹详情</button>`+
+  `</div>`;
+}
+function setView(v){ curView=v; renderMain(parsedCache.get(curPath)); }
+
 function renderMain(data){
   const runs=agentRuns(data);
   if(!runs.length){ document.getElementById('mainPane').innerHTML='<div class="welcome"><div class="big">∅</div>该文件无 agent 数据</div>'; return; }
   if(!runs.find(r=>r.id===curAgent)) curAgent=runs[0].id;
+
+  if(curView==='compare'){
+    document.getElementById('mainPane').innerHTML=
+      `<div class="topbar"><div class="crumb">📁 ${esc(folderOf(curPath)||curPath)}</div>${viewTabsHtml()}</div>`+
+      renderComparePage();
+    return;
+  }
+
   const subtabs=runs.map(r=>`<div class="subtab ${r.id===curAgent?'active':''}" onclick="switchAgent('${r.id}')">${esc(r.label)} · ${r.run.messages.length}条</div>`).join('');
   const run=runs.find(r=>r.id===curAgent).run;
   const meta=run.metadata||{};
@@ -325,9 +346,7 @@ function renderMain(data){
     (meta.total_turns!=null?`<span class="chip">轮次: ${esc(meta.total_turns)}</span>`:'')+
     (meta.role?`<span class="chip">${esc(meta.role)}</span>`:'');
   document.getElementById('mainPane').innerHTML=
-    `<div class="topbar"><div class="crumb">${esc(curPath)}</div><div class="subtabs">${subtabs}</div></div>`+
-    renderPrompt()+
-    renderFinal()+
+    `<div class="topbar"><div class="crumb">${esc(curPath)}</div>${viewTabsHtml()}<div class="subtabs">${subtabs}</div></div>`+
     renderStats(data)+
     `<div class="meta">${metaHtml}</div>`+
     `<div class="controls"><button class="ctrl-btn" onclick="expandAll()">全部展开</button><button class="ctrl-btn" onclick="collapseAll()">全部折叠</button></div>`+
@@ -393,16 +412,31 @@ function promptContent(run){
   c=c.trim();
   return c || null;
 }
-function renderPrompt(){
-  const folder=folderOf(curPath);
-  const t=trajByIndex(folder,'first');
-  if(!t) return '';
-  const p=promptContent(mainRun(t.data));
-  if(!p) return '';
-  return `<div class="mod-wrap mod-prompt"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
-    `<span class="mh-l">📝 Prompt　<span style="font-weight:400;opacity:.7;">(来自 ${esc(t.base)} · ${p.length}字)</span></span>`+
-    `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
-    `<div class="mod-box"><div class="content">${esc(p)}</div></div></div>`;
+function renderPromptText(){
+  const t=trajByIndex(folderOf(curPath),'first');
+  return t ? {base:t.base, text:promptContent(mainRun(t.data))} : {base:'', text:null};
+}
+function renderFinalObj(){
+  const t=trajByIndex(folderOf(curPath),'last');
+  return t ? {base:t.base, fc:finalFromData(t.data)} : {base:'', fc:null};
+}
+function renderComparePage(){
+  const P=renderPromptText(), F=renderFinalObj();
+  const p=P.text, fc=F.fc;
+  const left=`<div class="col mod-prompt"><div class="col-head">`+
+    `<span class="mh-l">📝 Prompt${P.base?` · ${esc(P.base)}`:''}${p?` · ${p.length}字`:''}</span>`+
+    (p?`<button class="copy-btn" onclick="copyBox(this)">复制</button>`:'')+
+    `</div><div class="col-body"><div class="content">${p?esc(p):'（该文件夹无 prompt）'}</div></div></div>`;
+  const fileTag = (fc&&fc.kind==='file'&&fc.file)?` · ${esc(fc.file)}`:'';
+  const right=`<div class="col mod-final"><div class="col-head">`+
+    `<span class="mh-l">📄 待评估类播客剧本${F.base?` · ${esc(F.base)}`:''}${fileTag}${fc?` · ${fc.text.length}字`:''}</span>`+
+    (fc?`<button class="copy-btn" onclick="copyBox(this)">复制</button>`:'')+
+    `</div><div class="col-body"><div class="content">${fc?esc(fc.text):'（该文件夹无最终产物）'}</div></div></div>`;
+  return `<div class="compare">${left}${right}</div>`;
+}
+function copyBox(btn){
+  const box=btn.closest('.col').querySelector('.content');
+  navigator.clipboard.writeText(box.textContent).then(()=>{ const o=btn.textContent; btn.textContent='✅ 已复制'; setTimeout(()=>btn.textContent=o,1500); });
 }
 
 // ============ 独立模块：最终产物（取本文件夹 -2 轨迹最终 write 的 content）============
@@ -436,22 +470,6 @@ function finalFromData(data){
   for(const run of ordered){ const fc=finalContent(run); if(fc && fc.kind==='file') return fc; }
   for(const run of ordered){ const fc=finalContent(run); if(fc) return fc; }
   return null;
-}
-function renderFinal(){
-  const folder=folderOf(curPath);
-  const t=trajByIndex(folder,'last');
-  if(!t) return '';
-  const fc=finalFromData(t.data);
-  if(!fc) return '';
-  const label = fc.kind==='file' ? `📄 最终产物 · ${esc(fc.file||fc.name||'文件')}` : '📄 最终产物 · 最后回复';
-  return `<div class="mod-wrap mod-final"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
-    `<span class="mh-l">${label}　<span style="font-weight:400;opacity:.7;">(来自 ${esc(t.base)} · ${fc.text.length}字)</span></span>`+
-    `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
-    `<div class="mod-box"><div class="content">${esc(fc.text)}</div></div></div>`;
-}
-function copyBox(btn){
-  const box=btn.closest('.mod-wrap').querySelector('.content');
-  navigator.clipboard.writeText(box.textContent).then(()=>{ const o=btn.textContent; btn.textContent='✅ 已复制'; setTimeout(()=>btn.textContent=o,1500); });
 }
 
 // ============ 统计 ============
