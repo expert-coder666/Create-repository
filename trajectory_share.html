@@ -108,13 +108,20 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 .arg-val { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; color:#374151; background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:8px 10px; }
 .tc-id { font-size:11px; color:#9ca3af; font-family:ui-monospace,monospace; margin-top:4px; }
 .kv { font-size:11px; color:#9ca3af; }
-/* 最终产出 */
-.final-wrap { margin:14px 20px 0; border:1px solid #fcd34d; border-radius:12px; overflow:hidden; max-width:960px; }
-.final-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; background:#fffbeb; cursor:pointer; font-size:13px; font-weight:700; color:#92400e; }
-.final-head .fh-l { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.final-box { padding:14px; background:#fff; max-height:460px; overflow:auto; }
-.copy-btn { flex:none; font-size:11px; padding:3px 10px; border:1px solid #fcd34d; border-radius:6px; background:#fff; cursor:pointer; color:#92400e; }
-.copy-btn:hover { background:#fffbeb; }
+/* 独立模块：prompt / 最终产出 */
+.mod-wrap { margin:14px 20px 0; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; max-width:960px; }
+.mod-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; font-size:13px; font-weight:700; }
+.mod-head .mh-l { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mod-box { padding:14px; background:#fff; max-height:460px; overflow:auto; }
+.copy-btn { flex:none; font-size:11px; padding:3px 10px; border-radius:6px; background:#fff; cursor:pointer; }
+.mod-final { border-color:#fcd34d; }
+.mod-final .mod-head { background:#fffbeb; color:#92400e; }
+.mod-final .copy-btn { border:1px solid #fcd34d; color:#92400e; }
+.mod-final .copy-btn:hover { background:#fffbeb; }
+.mod-prompt { border-color:#c7d2fe; }
+.mod-prompt .mod-head { background:#eef2ff; color:#3730a3; }
+.mod-prompt .copy-btn { border:1px solid #c7d2fe; color:#3730a3; }
+.mod-prompt .copy-btn:hover { background:#eef2ff; }
 .hidden { display:none !important; }
 </style>
 </head>
@@ -297,6 +304,7 @@ function renderMain(data){
     (meta.role?`<span class="chip">${esc(meta.role)}</span>`:'');
   document.getElementById('mainPane').innerHTML=
     `<div class="topbar"><div class="crumb">${esc(curPath)}</div><div class="subtabs">${subtabs}</div></div>`+
+    renderPrompt(run)+
     renderFinal(run)+
     renderStats(data)+
     `<div class="meta">${metaHtml}</div>`+
@@ -342,6 +350,35 @@ function matchFilter(m,f){
 
 function switchAgent(id){ curAgent=id; renderMain(parsedCache.get(curPath)); }
 
+// ============ 独立模块：prompt（初始任务提示）============
+function promptContent(run){
+  const msgs=run.messages||[];
+  const um=msgs.find(m=>m.role==='user' && typeof m.content==='string' && m.content.trim());
+  if(!um) return null;
+  let c=um.content;
+  const begins=[...c.matchAll(/---\s*USER MESSAGE BEGIN\s*---/g)];
+  if(begins.length){
+    const last=begins[begins.length-1];
+    const b=last.index+last[0].length;
+    const e=c.indexOf('USER MESSAGE END', b);
+    c = e>=0 ? c.slice(b, c.lastIndexOf('---', e)) : c.slice(b);
+  } else {
+    c = c.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g,'')
+         .replace(/<ide_selection>[\s\S]*?<\/ide_selection>/g,'')
+         .replace(/<ide_opened_file>[\s\S]*?<\/ide_opened_file>/g,'');
+  }
+  c=c.trim();
+  return c || null;
+}
+function renderPrompt(run){
+  const p=promptContent(run);
+  if(!p) return '';
+  return `<div class="mod-wrap mod-prompt"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
+    `<span class="mh-l">📝 Prompt　<span style="font-weight:400;opacity:.7;">(${p.length}字)</span></span>`+
+    `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
+    `<div class="mod-box"><div class="content">${esc(p)}</div></div></div>`;
+}
+
 // ============ 最终产出（最终 content 单独成块）============
 const WRITE_TOOLS=/^(write|edit|multiedit|str_replace|str_replace_editor|str_replace_based_edit_tool|create_file|notebook_edit|fs_write)$/i;
 function finalContent(run){
@@ -370,13 +407,13 @@ function renderFinal(run){
   const fc=finalContent(run);
   if(!fc) return '';
   const label = fc.kind==='file' ? `📄 最终产出 · ${esc(fc.file||fc.name||'文件')}` : '📄 最终产出 · 最后回复';
-  return `<div class="final-wrap"><div class="final-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
-    `<span class="fh-l">${label}　<span style="font-weight:400;opacity:.7;">(#${fc.at} · ${fc.text.length}字)</span></span>`+
-    `<button class="copy-btn" onclick="event.stopPropagation();copyFinal(this)">复制</button></div>`+
-    `<div class="final-box"><div class="content">${esc(fc.text)}</div></div></div>`;
+  return `<div class="mod-wrap mod-final"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
+    `<span class="mh-l">${label}　<span style="font-weight:400;opacity:.7;">(#${fc.at} · ${fc.text.length}字)</span></span>`+
+    `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
+    `<div class="mod-box"><div class="content">${esc(fc.text)}</div></div></div>`;
 }
-function copyFinal(btn){
-  const box=btn.closest('.final-wrap').querySelector('.content');
+function copyBox(btn){
+  const box=btn.closest('.mod-wrap').querySelector('.content');
   navigator.clipboard.writeText(box.textContent).then(()=>{ const o=btn.textContent; btn.textContent='✅ 已复制'; setTimeout(()=>btn.textContent=o,1500); });
 }
 
