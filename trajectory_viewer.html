@@ -267,6 +267,27 @@ function toggleFolder(row){
   if(node.classList.contains('closed')) openFolders.add(fp); else openFolders.delete(fp);
 }
 // ============ 选择并解析文件 ============
+function folderOf(p){ const i=p.lastIndexOf('/'); return i>=0?p.slice(0,i):''; }
+async function ensureFolderParsed(folder){
+  const sibs=[...store.keys()].filter(p=>folderOf(p)===folder);
+  for(const p of sibs){
+    if(parsedCache.has(p)) continue;
+    const entry=store.get(p);
+    try{ const text=(entry&&entry.__text!=null)?entry.__text:await entry.text(); parsedCache.set(p,JSON.parse(text)); }catch(e){}
+  }
+}
+function trajByIndex(folder, which){
+  const paths=[...parsedCache.keys()].filter(p=>folderOf(p)===folder && /trajectory-\d+\.json$/i.test(p));
+  if(!paths.length) return null;
+  paths.sort((a,b)=>(+a.match(/trajectory-(\d+)\.json$/i)[1])-(+b.match(/trajectory-(\d+)\.json$/i)[1]));
+  const pick = which==='first'?paths[0]:paths[paths.length-1];
+  return {path:pick, base:pick.slice(pick.lastIndexOf('/')+1), data:parsedCache.get(pick)};
+}
+function mainRun(data){
+  const runs=agentRuns(data);
+  const m=runs.find(r=>r.key==='main_agent');
+  return m?m.run:(runs[0]&&runs[0].run);
+}
 async function selectFile(path){
   curPath=path; curAgent=null; curFilter='all';
   document.querySelectorAll('.file-row').forEach(r=>r.classList.toggle('active', r.dataset.path===path));
@@ -280,6 +301,7 @@ async function selectFile(path){
     }
     catch(e){ document.getElementById('mainPane').innerHTML='<div class="welcome"><div class="big">⚠️</div>解析失败: '+esc(e.message)+'</div>'; return; }
   }
+  await ensureFolderParsed(folderOf(path));
   renderMain(data);
 }
 
@@ -304,8 +326,8 @@ function renderMain(data){
     (meta.role?`<span class="chip">${esc(meta.role)}</span>`:'');
   document.getElementById('mainPane').innerHTML=
     `<div class="topbar"><div class="crumb">${esc(curPath)}</div><div class="subtabs">${subtabs}</div></div>`+
-    renderPrompt(run)+
-    renderFinal(run)+
+    renderPrompt()+
+    renderFinal()+
     renderStats(data)+
     `<div class="meta">${metaHtml}</div>`+
     `<div class="controls"><button class="ctrl-btn" onclick="expandAll()">全部展开</button><button class="ctrl-btn" onclick="collapseAll()">全部折叠</button></div>`+
@@ -350,8 +372,9 @@ function matchFilter(m,f){
 
 function switchAgent(id){ curAgent=id; renderMain(parsedCache.get(curPath)); }
 
-// ============ 独立模块：prompt（初始任务提示）============
+// ============ 独立模块：prompt（取本文件夹 -0 轨迹开头，保证完整）============
 function promptContent(run){
+  if(!run) return null;
   const msgs=run.messages||[];
   const um=msgs.find(m=>m.role==='user' && typeof m.content==='string' && m.content.trim());
   if(!um) return null;
@@ -370,18 +393,22 @@ function promptContent(run){
   c=c.trim();
   return c || null;
 }
-function renderPrompt(run){
-  const p=promptContent(run);
+function renderPrompt(){
+  const folder=folderOf(curPath);
+  const t=trajByIndex(folder,'first');
+  if(!t) return '';
+  const p=promptContent(mainRun(t.data));
   if(!p) return '';
   return `<div class="mod-wrap mod-prompt"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
-    `<span class="mh-l">📝 Prompt　<span style="font-weight:400;opacity:.7;">(${p.length}字)</span></span>`+
+    `<span class="mh-l">📝 Prompt　<span style="font-weight:400;opacity:.7;">(来自 ${esc(t.base)} · ${p.length}字)</span></span>`+
     `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
     `<div class="mod-box"><div class="content">${esc(p)}</div></div></div>`;
 }
 
-// ============ 最终产出（最终 content 单独成块）============
+// ============ 独立模块：最终产物（取本文件夹 -2 轨迹最终 write 的 content）============
 const WRITE_TOOLS=/^(write|edit|multiedit|str_replace|str_replace_editor|str_replace_based_edit_tool|create_file|notebook_edit|fs_write)$/i;
 function finalContent(run){
+  if(!run) return null;
   const msgs=run.messages||[];
   for(let i=msgs.length-1;i>=0;i--){
     const tcs=msgs[i].tool_calls||[];
@@ -403,12 +430,22 @@ function finalContent(run){
   }
   return null;
 }
-function renderFinal(run){
-  const fc=finalContent(run);
+function finalFromData(data){
+  const runs=agentRuns(data);
+  const ordered=[...runs.filter(r=>r.key==='main_agent'), ...runs.filter(r=>r.key!=='main_agent')].map(r=>r.run);
+  for(const run of ordered){ const fc=finalContent(run); if(fc && fc.kind==='file') return fc; }
+  for(const run of ordered){ const fc=finalContent(run); if(fc) return fc; }
+  return null;
+}
+function renderFinal(){
+  const folder=folderOf(curPath);
+  const t=trajByIndex(folder,'last');
+  if(!t) return '';
+  const fc=finalFromData(t.data);
   if(!fc) return '';
-  const label = fc.kind==='file' ? `📄 最终产出 · ${esc(fc.file||fc.name||'文件')}` : '📄 最终产出 · 最后回复';
+  const label = fc.kind==='file' ? `📄 最终产物 · ${esc(fc.file||fc.name||'文件')}` : '📄 最终产物 · 最后回复';
   return `<div class="mod-wrap mod-final"><div class="mod-head" onclick="this.nextElementSibling.classList.toggle('hidden')">`+
-    `<span class="mh-l">${label}　<span style="font-weight:400;opacity:.7;">(#${fc.at} · ${fc.text.length}字)</span></span>`+
+    `<span class="mh-l">${label}　<span style="font-weight:400;opacity:.7;">(来自 ${esc(t.base)} · ${fc.text.length}字)</span></span>`+
     `<button class="copy-btn" onclick="event.stopPropagation();copyBox(this)">复制</button></div>`+
     `<div class="mod-box"><div class="content">${esc(fc.text)}</div></div></div>`;
 }
