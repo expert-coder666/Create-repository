@@ -101,6 +101,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang 
 .tool-call { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 12px; margin-top:8px; }
 .tool-call .tc-name { font-size:13px; font-weight:700; color:#15803d; margin-bottom:6px; }
 .tool-call .tc-args { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; color:#374151; }
+.arg-item { margin-top:6px; }
+.arg-key { display:inline-block; font-size:11px; font-weight:700; color:#047857; background:#dcfce7; padding:1px 8px; border-radius:6px; margin-bottom:3px; }
+.arg-val { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; color:#374151; background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:8px 10px; }
 .tc-id { font-size:11px; color:#9ca3af; font-family:ui-monospace,monospace; margin-top:4px; }
 .kv { font-size:11px; color:#9ca3af; }
 .hidden { display:none !important; }
@@ -393,6 +396,19 @@ function renderStats(data){
 function roleBadge(role){ const m={system:'b-system',user:'b-user',assistant:'b-assistant',tool:'b-tool'}; return `<span class="badge ${m[role]||'b-system'}">${esc(role)}</span>`; }
 function firstLine(s,n){ s=(s||'').replace(/\s+/g,' ').trim(); return s.length>n?s.slice(0,n)+'…':s; }
 function prettyArgs(a){ if(a==null)return''; if(typeof a==='string'){try{return JSON.stringify(JSON.parse(a),null,2);}catch(e){return a;}} try{return JSON.stringify(a,null,2);}catch(e){return String(a);} }
+function renderArgs(args){
+  let obj=args;
+  if(typeof args==='string'){ try{obj=JSON.parse(args);}catch(e){ return `<div class="arg-val">${esc(args)}</div>`; } }
+  if(obj && typeof obj==='object' && !Array.isArray(obj)){
+    const items=Object.entries(obj);
+    if(!items.length) return `<div class="arg-val">{}</div>`;
+    return items.map(([k,v])=>{
+      const vhtml = typeof v==='string' ? esc(v) : esc(JSON.stringify(v,null,2));
+      return `<div class="arg-item"><span class="arg-key">${esc(k)}</span><div class="arg-val">${vhtml}</div></div>`;
+    }).join('');
+  }
+  return `<div class="arg-val">${esc(typeof obj==='string'?obj:JSON.stringify(obj,null,2))}</div>`;
+}
 
 function renderMessages(run){
   const out=[];
@@ -409,7 +425,7 @@ function renderMessages(run){
     if(showReason && m.reasoning_content){ body+=`<div class="section"><div class="section-head" onclick="this.nextElementSibling.classList.toggle('hidden')">💭 思考过程 ▾</div><div class="reasoning">${esc(m.reasoning_content)}</div></div>`; }
     if(showTools && m.tool_calls && m.tool_calls.length){
       body+=`<div class="section"><div class="section-head" onclick="this.nextElementSibling.classList.toggle('hidden')">🔧 工具调用 (${m.tool_calls.length}) ▾</div><div>`;
-      m.tool_calls.forEach(tc=>{ const fn=tc.function||{}; body+=`<div class="tool-call"><div class="tc-name">${esc(fn.name||tc.type||'tool')}</div><div class="tc-args">${esc(prettyArgs(fn.arguments))}</div>`+(tc.id?`<div class="tc-id">${esc(tc.id)}</div>`:'')+`</div>`; });
+      m.tool_calls.forEach(tc=>{ const fn=tc.function||{}; body+=`<div class="tool-call"><div class="tc-name">${esc(fn.name||tc.type||'tool')}</div>${renderArgs(fn.arguments)}`+(tc.id?`<div class="tc-id">${esc(tc.id)}</div>`:'')+`</div>`; });
       body+=`</div></div>`;
     }
     if((f==='all'||f==='tool_response') && m.tool_call_id){ body+=`<div class="kv" style="margin-top:8px;">↳ tool_call_id: ${esc(m.tool_call_id)}</div>`; }
