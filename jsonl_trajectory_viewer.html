@@ -76,12 +76,18 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 .filters select,.filters input{padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
 .msg{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:var(--panel);overflow:hidden}
 .msg.labeled{border-left:3px solid var(--label)}
-.msg .mh{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);background:var(--bg)}
+.msg .mh{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);background:var(--bg);cursor:pointer;user-select:none}
 .role{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:5px;color:#fff}
 .role.system{background:var(--sys)} .role.user{background:var(--user)}
 .role.assistant{background:var(--asst)} .role.tool{background:var(--tool)}
 .mh .mi{color:var(--muted);font-size:12px} .mh .star{color:var(--label);font-size:13px}
 .mh .spacer{flex:1}
+.mh .chev{color:var(--muted);font-size:11px;transition:transform .12s;transform:rotate(90deg)}
+.msg.collapsed .chev{transform:rotate(0deg)}
+.msg.collapsed .mh{border-bottom:none}
+.msg.collapsed .mbody{display:none}
+.mh .peek{color:var(--muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46%;display:none}
+.msg.collapsed .peek{display:inline-block}
 .msg.role-system{border-left:3px solid var(--sys)} .msg.role-system .mh{background:var(--sys-bg)}
 .msg.role-user{border-left:3px solid var(--user)} .msg.role-user .mh{background:var(--user-bg)}
 .msg.role-assistant{border-left:3px solid var(--asst)} .msg.role-assistant .mh{background:var(--asst-bg)}
@@ -213,6 +219,13 @@ document.addEventListener('toggle', async e=>{
   try{ body.textContent=await translateText(src); d.dataset.done='1'; }
   catch(err){ body.classList.add('muted'); body.textContent='翻译失败:网络不可达(Google / MyMemory 均未响应)。点击「翻译」可重试。'; }
 }, true);
+/* click message header to collapse/expand */
+document.addEventListener('click', e=>{
+  const mh = e.target.closest && e.target.closest('.mh');
+  if(!mh || !mh.parentElement || !mh.parentElement.classList.contains('msg')) return;
+  if(window.getSelection && String(window.getSelection()).length>0) return;
+  mh.parentElement.classList.toggle('collapsed');
+});
 
 /* ---------- file loading ---------- */
 $('#pick').onclick = ()=> $('#file').click();
@@ -365,6 +378,8 @@ function renderConversation(msgs, labels){
     + `<option>system</option><option>user</option><option>assistant</option><option>tool</option></select></label>`
     + `<label><input type="checkbox" id="fLabel"> 只看标注(label=1)</label>`
     + `<input id="fText" placeholder="搜索文本…" style="flex:1;min-width:140px">`
+    + `<button class="btn sec" id="fExpand" style="padding:4px 10px">展开全部</button>`
+    + `<button class="btn sec" id="fCollapse" style="padding:4px 10px">收起全部</button>`
     + `<span class="stat" id="fStat"></span>`;
   wrap.appendChild(bar);
   const list = document.createElement('div'); list.id='msgs'; wrap.appendChild(list);
@@ -383,6 +398,8 @@ function renderConversation(msgs, labels){
   wrap.querySelector('#fRole').onchange=draw;
   wrap.querySelector('#fLabel').onchange=draw;
   wrap.querySelector('#fText').oninput=draw;
+  wrap.querySelector('#fExpand').onclick=()=>list.querySelectorAll('.msg').forEach(m=>m.classList.remove('collapsed'));
+  wrap.querySelector('#fCollapse').onclick=()=>list.querySelectorAll('.msg').forEach(m=>m.classList.add('collapsed'));
   setTimeout(draw,0);
   return wrap;
 }
@@ -396,13 +413,22 @@ function contentToHtml(content){
     return `<div class="txt">${esc(b)}</div>`;
   }).join('');
 }
+function msgPreview(msg){
+  const c=msg.content; let t='';
+  if(typeof c==='string') t=c;
+  else if(Array.isArray(c)){ const tb=c.find(b=>b&&b.type==='text'&&String(b.text||'').trim()); if(tb) t=tb.text; }
+  if(!t && msg.reasoning_content) t='💭 '+msg.reasoning_content;
+  if(!t && (msg.tool_calls||[]).length) t='🔧 '+(msg.tool_calls[0].name||(msg.tool_calls[0].function&&msg.tool_calls[0].function.name)||'');
+  return String(t).replace(/\s+/g,' ').trim().slice(0,120);
+}
 function renderMsg(msg,i,lab){
   const el = document.createElement('div');
-  el.className = 'msg role-' + (msg.role||'unknown') + (lab?' labeled':'');
-  const role = msg.role||'?';
-  let html = `<div class="mh"><span class="role ${esc(role)}">${esc(role)}</span>`
+  const role = msg.role||'unknown';
+  el.className = 'msg role-' + role + (lab?' labeled':'') + (role==='system'?' collapsed':'');
+  let html = `<div class="mh"><span class="chev">▸</span><span class="role ${esc(role)}">${esc(role)}</span>`
     + `<span class="mi">#${i}</span>`
     + (lab?`<span class="star" title="label=1">★ 标注</span>`:'')
+    + `<span class="peek">${esc(msgPreview(msg))}</span>`
     + `<span class="spacer"></span>`
     + (msg.is_restore?`<span class="mi">restore</span>`:'')
     + `</div><div class="mbody">`;
