@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSONL 单题查看器 · 粘贴 prompt + candidates</title>
+<style>
+:root{
+  --bg:#eef1f6; --panel:#ffffff; --panel2:#f8fafc; --border:#e2e8f0; --text:#0f172a; --muted:#64748b;
+  --accent:#6366f1; --accent-soft:#eef2ff;
+  --sys:#64748b; --user:#0ea5e9; --asst:#8b5cf6; --tool:#10b981;
+  --label:#f59e0b;
+  --code-bg:#f1f5f9; --chip:#f1f5f9; --hover:#eef2ff; --shadow:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+  --good:#059669; --good-bg:#ecfdf5; --warn:#d97706; --warn-bg:#fffbeb; --bad:#dc2626; --bad-bg:#fef2f2;
+  --info:#2563eb; --info-bg:#eff6ff; --violet:#7c3aed; --violet-bg:#f5f3ff;
+  --sys-bg:#f1f5f9; --user-bg:#eff6ff; --asst-bg:#f5f3ff; --tool-bg:#ecfdf5;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b0e14; --panel:#141924; --panel2:#0f141d; --border:#232b3a; --text:#e6ebf2; --muted:#8b97a8;
+    --accent:#818cf8; --accent-soft:#1e2540;
+    --sys:#94a3b8; --user:#38bdf8; --asst:#a78bfa; --tool:#34d399;
+    --label:#fbbf24;
+    --code-bg:#0b0f17; --chip:#1b2230; --hover:#1a2236; --shadow:0 1px 3px rgba(0,0,0,.4);
+    --good:#34d399; --good-bg:#0d2b22; --warn:#fbbf24; --warn-bg:#2b2410; --bad:#f87171; --bad-bg:#2b1414;
+    --info:#60a5fa; --info-bg:#13233d; --violet:#a78bfa; --violet-bg:#221a3d;
+    --sys-bg:#182030; --user-bg:#13233d; --asst-bg:#221a3d; --tool-bg:#0d2b22;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+#topbar{display:flex;align-items:center;gap:14px;padding:11px 18px;background:var(--panel);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;flex-wrap:wrap;box-shadow:var(--shadow)}
+#topbar h1{font-size:15px;margin:0;font-weight:700;letter-spacing:-.01em}
+.btn{background:var(--accent);color:#fff;border:none;padding:8px 15px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:0 1px 2px rgba(99,102,241,.3)}
+.btn:hover{filter:brightness(1.07)}
+.btn.sec{background:var(--chip);color:var(--text);border:1px solid var(--border);box-shadow:none}
+.stat{color:var(--muted);font-size:12px}
+#layout{display:flex;height:calc(100vh - 53px)}
+#sidebar{width:340px;min-width:260px;max-width:50%;border-right:1px solid var(--border);
+  background:var(--panel);overflow-y:auto;resize:horizontal}
+#sidebar .search{padding:8px;position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--border)}
+#sidebar input{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
+.rec{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;border-left:3px solid transparent}
+.rec:hover{background:var(--hover)}
+.rec.active{background:var(--accent-soft);border-left:3px solid var(--accent)}
+.rec .r1{display:flex;justify-content:space-between;gap:6px;font-weight:600}
+.rec .r2{color:var(--muted);font-size:12px;margin-top:3px;word-break:break-all}
+.rec .idx{color:var(--muted);font-weight:600;margin-right:6px;font-variant-numeric:tabular-nums}
+#main{flex:1;overflow-y:auto;padding:18px 22px}
+.drop{margin:40px auto;max-width:560px;border:2px dashed var(--border);border-radius:12px;
+  padding:48px 24px;text-align:center;color:var(--muted)}
+.drop.over{border-color:var(--accent);background:var(--hover)}
+/* record detail */
+.hdr{margin-bottom:14px}
+.hdr h2{font-size:16px;margin:0 0 8px;word-break:break-all}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{background:var(--chip);border:1px solid var(--border);border-radius:8px;padding:4px 11px;font-size:12px;font-weight:600;color:var(--text)}
+.chip b{color:var(--muted);font-weight:500;margin-right:5px;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em}
+.chip.good{background:var(--good-bg);border-color:transparent;color:var(--good)}
+.chip.good b{color:var(--good);opacity:.7}
+.chip.warn{background:var(--warn-bg);border-color:transparent;color:var(--warn)}
+.chip.warn b{color:var(--warn);opacity:.7}
+.chip.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
+.chip.bad b{color:var(--bad);opacity:.7}
+.chip.info{background:var(--info-bg);border-color:transparent;color:var(--info)}
+.chip.info b{color:var(--info);opacity:.7}
+.chip.violet{background:var(--violet-bg);border-color:transparent;color:var(--violet)}
+.chip.violet b{color:var(--violet);opacity:.7}
+.tabs{display:flex;gap:2px;margin:18px 0 14px;background:var(--chip);padding:4px;border-radius:10px;flex-wrap:wrap;width:fit-content}
+.tab{padding:6px 16px;cursor:pointer;border-radius:7px;color:var(--muted);font-size:13px;font-weight:600}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);background:var(--panel);box-shadow:var(--shadow)}
+.filters{display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;font-size:12px}
+.filters select,.filters input{padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
+.msg{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:var(--panel);overflow:hidden}
+.msg.labeled{border-left:3px solid var(--label)}
+.msg .mh{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);background:var(--bg);cursor:pointer;user-select:none}
+.role{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:5px;color:#fff}
+.role.system{background:var(--sys)} .role.user{background:var(--user)}
+.role.assistant{background:var(--asst)} .role.tool{background:var(--tool)}
+.mh .mi{color:var(--muted);font-size:12px} .mh .star{color:var(--label);font-size:13px}
+.mh .spacer{flex:1}
+.mh .chev{color:var(--muted);font-size:11px;transition:transform .12s;transform:rotate(90deg)}
+.msg.collapsed .chev{transform:rotate(0deg)}
+.msg.collapsed .mh{border-bottom:none}
+.msg.collapsed .mbody{display:none}
+.mh .peek{color:var(--muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46%;display:none}
+.msg.collapsed .peek{display:inline-block}
+.msg.role-system{border-left:3px solid var(--sys)} .msg.role-system .mh{background:var(--sys-bg)}
+.msg.role-user{border-left:3px solid var(--user)} .msg.role-user .mh{background:var(--user-bg)}
+.msg.role-assistant{border-left:3px solid var(--asst)} .msg.role-assistant .mh{background:var(--asst-bg)}
+.msg.role-tool{border-left:3px solid var(--tool)} .msg.role-tool .mh{background:var(--tool-bg)}
+.msg.labeled{box-shadow:inset 3px 0 0 var(--label),var(--shadow)}
+/* flow overview grid */
+.flowbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--muted)}
+.flowlegend{display:flex;gap:6px;align-items:center}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+.flow{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.fcard{border:1.5px solid var(--border);border-radius:11px;padding:10px 12px;background:var(--panel);cursor:pointer;transition:transform .08s}
+.fcard:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.fcard.system{background:var(--sys-bg);border-color:var(--sys)}
+.fcard.user{background:var(--user-bg);border-color:var(--user)}
+.fcard.assistant{background:var(--asst-bg);border-color:var(--asst)}
+.fcard.tool{background:var(--tool-bg);border-color:var(--tool)}
+.fcard .fh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.fcard .fn{color:var(--muted);font-weight:700;font-size:12px;font-variant-numeric:tabular-nums}
+.fcard .frole{font-weight:800;font-size:12px;letter-spacing:.05em}
+.fcard .flabel{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--muted);border:1px solid var(--border);
+  border-radius:5px;padding:1px 6px;background:var(--panel)}
+.fcard .flabel.on{color:#fff;background:var(--label);border-color:var(--label)}
+.fcard.hl{border:2px solid var(--label);background:var(--warn-bg);box-shadow:0 0 0 3px rgba(245,158,11,.22)}
+.fcard.hl .fn::before{content:"✨ "}
+.fcard.hl .frole{color:var(--warn)!important}
+.btag.think{background:var(--warn-bg);border-color:var(--label);color:var(--warn);font-weight:700}
+.fcard .fblocks{display:flex;flex-wrap:wrap;gap:5px}
+.btag{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:2px 7px;color:var(--text)}
+.mbody{padding:10px 12px}
+.blk{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;background:var(--code-bg);border-radius:6px;padding:9px 11px;margin:6px 0;overflow-x:auto}
+.txt{white-space:pre-wrap;word-break:break-word;margin:4px 0}
+details.reason{margin:6px 0}
+details.reason>summary{cursor:pointer;color:var(--muted);font-size:12px;user-select:none}
+.reason .blk{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+details.trans{margin:5px 0 8px}
+details.trans>summary{cursor:pointer;color:var(--accent);font-size:11.5px;font-weight:600;user-select:none;
+  display:inline-block;padding:2px 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+details.trans>summary:hover{background:var(--hover)}
+details.trans[open]>summary{margin-bottom:6px}
+.trans .tbody{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.65;
+  background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;padding:9px 12px}
+.trans .tbody.muted{color:var(--muted)}
+.tc{margin:6px 0;border:1px solid var(--border);border-radius:6px}
+.tc .tch{padding:5px 10px;background:var(--chip);font-size:12px;font-weight:600;border-bottom:1px solid var(--border)}
+.tc .tch code{color:var(--tool)}
+.section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
+.section h3{margin:0 0 8px;font-size:13px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:13px}
+.kv .k{color:var(--muted)} .kv .v{word-break:break-all}
+.hidden{display:none}
+pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  background:var(--code-bg);padding:11px;border-radius:6px;overflow-x:auto}
+.tooldef{border:1px solid var(--border);border-radius:6px;margin-bottom:8px}
+.tooldef summary{padding:7px 11px;cursor:pointer;font-weight:600;font-size:13px}
+.tooldef .tb{padding:0 11px 10px}
+/* ---------- paste input ---------- */
+.pastewrap{max-width:920px;margin:14px auto;padding:0 6px}
+.pastewrap h2{font-size:16px;margin:0 0 6px}
+.pastewrap .hint{color:var(--muted);font-size:13px;margin-bottom:8px;line-height:1.6}
+.pastewrap code{background:var(--code-bg);padding:1px 5px;border-radius:4px;font-size:12px}
+#pasteInput{width:100%;box-sizing:border-box;height:50vh;min-height:280px;padding:12px;
+  border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);
+  font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.55;resize:vertical}
+#pasteInput:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.perr{display:none;color:var(--bad);background:var(--bad-bg);border:1px solid var(--bad);
+  border-radius:8px;padding:9px 11px;margin-top:8px;font-size:13px;white-space:pre-wrap}
+.prow{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <h1>🧭 JSONL 单题查看器</h1>
+  <button class="btn" id="reinput" style="display:none">✎ 重新输入</button>
+  <span class="stat" id="count"></span>
+</div>
+<div id="layout">
+  <div id="main"></div>
+</div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+let RECORDS = [];      // parsed objects
+let CUR = -1;          // selected index
+let TAB = 'flow';
+
+const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const g = (o,p,d)=>{ try{ return p.split('.').reduce((a,k)=>a&&a[k]!=null?a[k]:undefined,o) ?? d; }catch(e){ return d; } };
+const pj = v => { try{ return JSON.stringify(v,null,2); }catch(e){ return String(v); } };
+const num = n => (typeof n==='number')? n.toLocaleString('en-US') : n;
+
+/* ---------- translation (on-demand, collapsed) ---------- */
+let TSRC = [];            // tid -> source text (reset per record render)
+const TCACHE = {};        // source text -> translated
+function looksChinese(s){ const z=(s.match(/[一-鿿]/g)||[]).length; const a=(s.match(/[A-Za-z]/g)||[]).length; return z>=a; }
+function needsTrans(s){ s=String(s||''); if(s.trim().length<3) return false; if(!/[A-Za-z]{2,}/.test(s)) return false; return !looksChinese(s); }
+function transBlock(text){
+  if(!needsTrans(text)) return '';
+  const id = TSRC.push(String(text))-1;
+  return `<details class="trans" data-tid="${id}"><summary>🌐 翻译</summary><div class="tbody muted">展开以翻译…</div></details>`;
+}
+function chunkText(str,n){ const out=[]; let s=String(str); while(s.length>n){ let cut=s.lastIndexOf('\n',n); if(cut<n*0.5)cut=s.lastIndexOf('. ',n); if(cut<n*0.5)cut=n; out.push(s.slice(0,cut)); s=s.slice(cut);} if(s.length)out.push(s); return out; }
+async function fetchJSON(url,ms){ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||6000);
+  try{ const r=await fetch(url,{signal:c.signal}); if(!r.ok) throw new Error('http '+r.status); return await r.json(); } finally{ clearTimeout(t); } }
+async function viaGoogle(text){ const parts=[];
+  for(const ck of chunkText(text,4000)){
+    const j=await fetchJSON('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q='+encodeURIComponent(ck),5000);
+    parts.push((j[0]||[]).map(x=>x[0]).join('')); }
+  return parts.join(''); }
+async function viaMyMemory(text){ const parts=[];
+  for(const ck of chunkText(text,450)){
+    const j=await fetchJSON('https://api.mymemory.translated.net/get?langpair=en|zh-CN&q='+encodeURIComponent(ck),9000);
+    parts.push((j.responseData&&j.responseData.translatedText)||''); }
+  return parts.join(''); }
+async function translateText(text){
+  if(TCACHE[text]!=null) return TCACHE[text];
+  let out;
+  try{ out=await viaGoogle(text); if(!out||!out.trim()) throw new Error('empty'); }
+  catch(e){ out=await viaMyMemory(text); }
+  TCACHE[text]=out; return out;
+}
+document.addEventListener('toggle', async e=>{
+  const d=e.target;
+  if(!(d.classList && d.classList.contains('trans') && d.open)) return;
+  if(d.dataset.done) return;
+  const body=d.querySelector('.tbody'); const src=TSRC[+d.dataset.tid];
+  if(src==null){ body.textContent='(无内容)'; return; }
+  body.classList.remove('muted'); body.textContent='翻译中…';
+  try{ body.textContent=await translateText(src); d.dataset.done='1'; }
+  catch(err){ body.classList.add('muted'); body.textContent='翻译失败:网络不可达(Google / MyMemory 均未响应)。点击「翻译」可重试。'; }
+}, true);
+/* click message header to collapse/expand */
+document.addEventListener('click', e=>{
+  const mh = e.target.closest && e.target.closest('.mh');
+  if(!mh || !mh.parentElement || !mh.parentElement.classList.contains('msg')) return;
+  if(window.getSelection && String(window.getSelection()).length>0) return;
+  mh.parentElement.classList.toggle('collapsed');
+});
+
+/* ---------- paste input (single-item: prompt + candidates) ---------- */
+let LAST_INPUT = '';
+const EXAMPLE = JSON.stringify({
+  prompt: [
+    { role:"system", content:[{type:"text", text:"You are a helpful coding agent. Fix the failing test."}] },
+    { role:"user", content:[{type:"text", text:"The function add() returns wrong results for negatives."}] },
+    { role:"assistant",
+      reasoning_content:"Let me inspect add(). It likely uses abs() incorrectly.",
+      content:[{type:"text", text:"I'll open the file and check the implementation."}],
+      tool_calls:[{name:"read_file", arguments:{path:"src/math.py"}}] },
+    { role:"tool", content:[{type:"text", text:"def add(a,b):\n    return abs(a)+abs(b)"}] }
+  ],
+  labels: [0,0,1,0],
+  candidates: [
+    [ { role:"assistant",
+        reasoning_content:"The bug is abs(). Should be plain addition.",
+        content:[{type:"text", text:"Fix: return a + b"}],
+        tool_calls:[{name:"edit_file", arguments:{path:"src/math.py", patch:"return a + b"}}] } ]
+  ]
+}, null, 2);
+
+function normalizeRec(o){
+  if(o && typeof o==='object'){
+    if(!o.candidates && o.candidate!=null) o.candidates = o.candidate;
+    if(Array.isArray(o.candidates) && o.candidates.length
+       && !Array.isArray(o.candidates[0]) && o.candidates[0] && o.candidates[0].role){
+      o.candidates = [o.candidates];   // flat message list -> single candidate group
+    }
+  }
+  return o;
+}
+function parseInput(text){
+  text = String(text||'').trim();
+  if(!text) return { err:'请粘贴单题数据(JSON 或 JSONL 文本)。' };
+  let recs = [];
+  try{
+    const v = JSON.parse(text);
+    recs = Array.isArray(v) ? v.slice() : [v];
+  }catch(e){
+    let bad = 0;
+    text.split(/\r?\n/).forEach(l=>{ l=l.trim(); if(!l) return; try{ recs.push(JSON.parse(l)); }catch(_){ bad++; } });
+    if(!recs.length) return { err:'解析失败:既不是有效的 JSON,也不是有效的 JSONL。\n请检查引号、逗号、括号是否配对。' };
+  }
+  recs = recs.map(normalizeRec).filter(o=>o && typeof o==='object');
+  if(!recs.length) return { err:'未找到有效记录对象。' };
+  const first = recs[0];
+  if(!Array.isArray(first.prompt) && !Array.isArray(first.candidates))
+    return { err:'缺少必要字段:至少需要 prompt 或 candidates 之一。' };
+  return { recs };
+}
+function doParse(){
+  const ta = $('#pasteInput'), errEl = $('#pasteErr');
+  const res = parseInput(ta.value);
+  if(res.err){ errEl.textContent = res.err; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  LAST_INPUT = ta.value;
+  RECORDS = res.recs; CUR = 0;
+  $('#count').textContent = RECORDS.length>1 ? `共 ${RECORDS.length} 条 · 展示第 1 条` : '';
+  $('#reinput').style.display = '';
+  renderRecord(RECORDS[0]);
+}
+function showPasteUI(prefill){
+  $('#reinput').style.display = 'none';
+  $('#count').textContent = '';
+  $('#main').innerHTML =
+    `<div class="pastewrap">`
+    + `<h2>粘贴单题数据(JSON 或 JSONL)</h2>`
+    + `<div class="hint">必要字段:<code>prompt</code> + <code>candidates</code>(也接受单数 <code>candidate</code>)。`
+    + `其余字段(<code>labels</code> / <code>tools</code> / <code>meta</code>)可选,提供后会一并展示。<br>`
+    + `支持:单个 JSON 对象、JSON 数组,或每行一个对象的 JSONL 文本。</div>`
+    + `<textarea id="pasteInput" spellcheck="false" placeholder='{"prompt":[...], "candidates":[[...]]}'></textarea>`
+    + `<div id="pasteErr" class="perr"></div>`
+    + `<div class="prow">`
+    + `<button class="btn" id="doParse">解析并渲染</button>`
+    + `<button class="btn sec" id="loadEx">加载示例</button>`
+    + `<button class="btn sec" id="clearTa">清空</button>`
+    + `</div></div>`;
+  const ta = $('#pasteInput');
+  ta.value = prefill || '';
+  $('#doParse').onclick = doParse;
+  $('#loadEx').onclick = ()=>{ ta.value = EXAMPLE; $('#pasteErr').style.display='none'; ta.focus(); };
+  $('#clearTa').onclick = ()=>{ ta.value=''; $('#pasteErr').style.display='none'; ta.focus(); };
+  ta.focus();
+}
+$('#reinput').onclick = ()=> showPasteUI(LAST_INPUT);
+/* ---------- record helpers ---------- */
+function recTitle(o){ return g(o,'meta.instance_id') || g(o,'data_id') || '(单题)'; }
+function recModel(o){ return g(o,'meta.teacher_model') || g(o,'model') || ''; }
+/* ---------- record detail ---------- */
+function renderRecord(o){
+  TSRC = [];
+  const m = o.meta || {};
+  const passed = g(o,'meta.analysis.trajectory.passed');
+  const cheat = g(o,'meta.analysis.trajectory.cheating');
+  const rew = m.reward;
+  const chipCls = {
+    reward: (rew===1||rew==='1'||rew===1.0)?'good':(rew===0?'bad':''),
+    passed: passed===true?'good':(passed===false?'bad':''),
+    cheating: (cheat && cheat!=='none' && cheat!=='clean')?'warn':'good',
+    model:'violet', language:'info', task:'info',
+  };
+  const chips = [
+    ['data_id', g(o,'data_id')], ['instance', m.instance_id], ['language', m.language],
+    ['task', m.task_type], ['reward', rew], ['model', m.teacher_model],
+    ['scaffold', m.scaffold], ['category', o.category], ['tokens', num(m.token_cnt)],
+    ['passed', passed], ['cheating', cheat],
+  ].filter(([,v])=>v!=null && v!=='')
+   .map(([k,v])=>`<span class="chip ${chipCls[k]||''}"><b>${esc(k)}</b>${esc(v)}</span>`).join('');
+  const prompt = Array.isArray(o.prompt)?o.prompt:[];
+  const cands = Array.isArray(o.candidates)?o.candidates:[];
+  const nCand = cands.reduce((a,c)=>a+(Array.isArray(c)?c.length:1),0);
+  const tabs = [
+    ['flow', '总览'],
+    ['conv', `对话 (${prompt.length})`],
+    ['cand', `候选答案 (${nCand})`],
+    ['tools', `工具 (${(o.tools||[]).length})`],
+    ['meta', 'Meta / 原始'],
+  ];
+  $('#main').innerHTML =
+    `<div class="hdr"><h2>#${CUR} ${esc(recTitle(o))}</h2><div class="chips">${chips}</div></div>`
+    + `<div class="tabs">${tabs.map(([k,t])=>`<div class="tab${k===TAB?' active':''}" data-t="${k}">${t}</div>`).join('')}</div>`
+    + `<div id="tabpane"></div>`;
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.t;renderRecord(o);});
+  const pane = $('#tabpane');
+  if(TAB==='flow') pane.appendChild(renderFlow(prompt, o.labels||[], cands));
+  else if(TAB==='conv') pane.appendChild(renderConversation(prompt, o.labels||[]));
+  else if(TAB==='cand') pane.appendChild(renderCandidates(cands));
+  else if(TAB==='tools') pane.innerHTML = renderTools(o.tools||[]);
+  else pane.innerHTML = renderMeta(o);
+}
+/* ---------- flow overview ---------- */
+function blockTags(msg){
+  const tags=[];
+  if(msg.reasoning_content && String(msg.reasoning_content).trim()) tags.push('thinking');
+  const c=msg.content;
+  const hasText = (typeof c==='string' && c.trim()) || (Array.isArray(c) && c.some(b=>b&&b.type==='text'&&String(b.text||'').trim()));
+  if(hasText) tags.push(msg.role==='tool'?'tool_result':'text');
+  if((msg.tool_calls||[]).length) tags.push('tool_calls');
+  if(!tags.length && c!=null) tags.push('content');
+  return tags;
+}
+function renderFlow(msgs, labels, cands){
+  const wrap=document.createElement('div');
+  const nLabel=labels.filter(x=>x).length;
+  const nCand=(cands||[]).reduce((a,c)=>a+(Array.isArray(c)?c.length:1),0);
+  const nHL=msgs.filter((m,i)=>(labels[i]||0) && blockTags(m).includes('thinking')).length;
+  wrap.innerHTML=`<div class="flowbar">`
+    +`<span class="chip info">prompt ${msgs.length} 条 + candidates ${nCand} 条</span>`
+    +`<span class="chip warn">${nLabel} 条 label=1</span>`
+    +`<span class="chip warn" style="border:2px solid var(--label)">✨ ${nHL} 条 label=1 且含 thinking</span>`
+    +`<span class="flowlegend"><span class="dot" style="background:var(--sys)"></span>system`
+    +`<span class="dot" style="background:var(--user)"></span>user`
+    +`<span class="dot" style="background:var(--asst)"></span>assistant`
+    +`<span class="dot" style="background:var(--tool)"></span>tool</span></div>`;
+  const grid=document.createElement('div'); grid.className='flow';
+  msgs.forEach((m,i)=>{
+    const role=m.role||'?', lab=labels[i]||0;
+    const tags=blockTags(m), hasThink=tags.includes('thinking');
+    const hl = lab && hasThink;
+    const card=document.createElement('div');
+    card.className='fcard '+role+(hl?' hl':'');
+    card.innerHTML=`<div class="fh"><span class="fn">#${i}</span>`
+      +`<span class="frole" style="color:var(--${role==='assistant'?'asst':role})">${esc(role).toUpperCase()}</span>`
+      +`<span class="flabel${lab?' on':''}">label=${lab}</span></div>`
+      +`<div class="fblocks">${tags.map(t=>`<span class="btag${t==='thinking'?' think':''}">${esc(t)}</span>`).join('')}</div>`;
+    card.onclick=()=>{ TAB='conv'; renderRecord(RECORDS[CUR]); setTimeout(()=>{const el=$('#msgs')&&$('#msgs').children[i];if(el)el.scrollIntoView({block:'center'});},60); };
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+/* ---------- conversation ---------- */
+function renderConversation(msgs, labels){
+  const wrap = document.createElement('div');
+  const bar = document.createElement('div');
+  bar.className='filters';
+  bar.innerHTML = `<label>角色 <select id="fRole"><option value="">全部</option>`
+    + `<option>system</option><option>user</option><option>assistant</option><option>tool</option></select></label>`
+    + `<label><input type="checkbox" id="fLabel"> 只看标注(label=1)</label>`
+    + `<input id="fText" placeholder="搜索文本…" style="flex:1;min-width:140px">`
+    + `<button class="btn sec" id="fExpand" style="padding:4px 10px">展开全部</button>`
+    + `<button class="btn sec" id="fCollapse" style="padding:4px 10px">收起全部</button>`
+    + `<span class="stat" id="fStat"></span>`;
+  wrap.appendChild(bar);
+  const list = document.createElement('div'); list.id='msgs'; wrap.appendChild(list);
+  const draw = ()=>{
+    const role=$('#fRole').value, onlyL=$('#fLabel').checked, q=($('#fText').value||'').toLowerCase();
+    list.innerHTML=''; let shown=0;
+    msgs.forEach((msg,i)=>{
+      const lab = labels[i]||0;
+      if(role && msg.role!==role) return;
+      if(onlyL && !lab) return;
+      if(q && !JSON.stringify(msg).toLowerCase().includes(q)) return;
+      list.appendChild(renderMsg(msg,i,lab)); shown++;
+    });
+    $('#fStat').textContent = `显示 ${shown}/${msgs.length}`;
+  };
+  wrap.querySelector('#fRole').onchange=draw;
+  wrap.querySelector('#fLabel').onchange=draw;
+  wrap.querySelector('#fText').oninput=draw;
+  wrap.querySelector('#fExpand').onclick=()=>list.querySelectorAll('.msg').forEach(m=>m.classList.remove('collapsed'));
+  wrap.querySelector('#fCollapse').onclick=()=>list.querySelectorAll('.msg').forEach(m=>m.classList.add('collapsed'));
+  setTimeout(draw,0);
+  return wrap;
+}
+function contentToHtml(content){
+  if(content==null) return '';
+  if(typeof content==='string') return `<div class="txt">${esc(content)}</div>`+transBlock(content);
+  if(!Array.isArray(content)) return `<pre class="raw">${esc(pj(content))}</pre>`;
+  return content.map(b=>{
+    if(b && b.type==='text') return `<div class="txt">${esc(b.text)}</div>`+transBlock(b.text);
+    if(b && typeof b==='object') return `<div class="stat">[${esc(b.type||'block')}]</div><pre class="raw">${esc(pj(b))}</pre>`;
+    return `<div class="txt">${esc(b)}</div>`;
+  }).join('');
+}
+function msgPreview(msg){
+  const c=msg.content; let t='';
+  if(typeof c==='string') t=c;
+  else if(Array.isArray(c)){ const tb=c.find(b=>b&&b.type==='text'&&String(b.text||'').trim()); if(tb) t=tb.text; }
+  if(!t && msg.reasoning_content) t='💭 '+msg.reasoning_content;
+  if(!t && (msg.tool_calls||[]).length) t='🔧 '+(msg.tool_calls[0].name||(msg.tool_calls[0].function&&msg.tool_calls[0].function.name)||'');
+  return String(t).replace(/\s+/g,' ').trim().slice(0,120);
+}
+function renderMsg(msg,i,lab){
+  const el = document.createElement('div');
+  const role = msg.role||'unknown';
+  el.className = 'msg role-' + role + (lab?' labeled':'') + (role==='system'?' collapsed':'');
+  let html = `<div class="mh"><span class="chev">▸</span><span class="role ${esc(role)}">${esc(role)}</span>`
+    + `<span class="mi">#${i}</span>`
+    + (lab?`<span class="star" title="label=1">★ 标注</span>`:'')
+    + `<span class="peek">${esc(msgPreview(msg))}</span>`
+    + `<span class="spacer"></span>`
+    + (msg.is_restore?`<span class="mi">restore</span>`:'')
+    + `</div><div class="mbody">`;
+  const reason = msg.reasoning_content;
+  if(reason && String(reason).trim()){
+    html += `<details class="reason"><summary>💭 思考过程 (${String(reason).length} 字)</summary>`
+      + `<div class="blk">${esc(reason)}</div>` + transBlock(reason) + `</details>`;
+  }
+  html += contentToHtml(msg.content);
+  (msg.tool_calls||[]).forEach(tc=>{
+    const args = (typeof tc.arguments==='string')? tc.arguments : pj(tc.arguments);
+    html += `<div class="tc"><div class="tch">🔧 调用 <code>${esc(tc.name||tc.function&&tc.function.name)}</code></div>`
+      + `<pre class="raw">${esc(args)}</pre></div>`;
+  });
+  html += `</div>`;
+  el.innerHTML = html;
+  return el;
+}
+/* ---------- candidates ---------- */
+function renderCandidates(cands){
+  const wrap = document.createElement('div');
+  if(!cands.length){ wrap.innerHTML='<div class="stat">无候选答案</div>'; return wrap; }
+  cands.forEach((c,ci)=>{
+    const msgs = Array.isArray(c)?c:[c];
+    const h = document.createElement('div');
+    h.innerHTML = `<div class="section" style="padding:8px 12px"><b>候选 #${ci}</b> · ${msgs.length} 条消息</div>`;
+    wrap.appendChild(h);
+    msgs.forEach((m,mi)=>wrap.appendChild(renderMsg(m,mi,1)));
+  });
+  return wrap;
+}
+/* ---------- tools ---------- */
+function renderTools(tools){
+  if(!tools.length) return '<div class="stat">无工具定义</div>';
+  return tools.map(t=>{
+    const fn = t.function||t;
+    return `<details class="tooldef"><summary>${esc(fn.name)}</summary>`
+      + `<div class="tb"><div class="txt">${esc(fn.description||'')}</div>` + transBlock(fn.description||'')
+      + (fn.parameters?`<pre class="raw">${esc(pj(fn.parameters))}</pre>`:'')
+      + `</div></details>`;
+  }).join('');
+}
+/* ---------- meta / raw ---------- */
+function renderMeta(o){
+  const m = o.meta||{};
+  const rows = Object.entries(m).filter(([k,v])=>typeof v!=='object' || v===null)
+    .map(([k,v])=>`<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`).join('');
+  let html = `<div class="section"><h3>meta 概览</h3><div class="kv">${rows}</div></div>`;
+  const ana = g(o,'meta.analysis');
+  if(ana) html += `<div class="section"><h3>analysis</h3><pre class="raw">${esc(pj(ana))}</pre></div>`;
+  if(m.test_output) html += `<div class="section"><h3>test_output</h3><pre class="raw">${esc(m.test_output)}</pre></div>`;
+  if(m.output_patch) html += `<div class="section"><h3>output_patch</h3><pre class="raw">${esc(m.output_patch)}</pre></div>`;
+  html += `<div class="section"><h3>完整记录 (raw JSON)</h3>`
+    + `<details><summary style="cursor:pointer;color:var(--muted);font-size:12px">展开 (可能较大)</summary>`
+    + `<pre class="raw">${esc(pj(o))}</pre></details></div>`;
+  return html;
+}
+/* ---------- init ---------- */
+showPasteUI('');
+</script>
+</body>
+</html>
