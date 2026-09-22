@@ -254,6 +254,12 @@ const EX_CAND = JSON.stringify([
       tool_calls:[{name:"edit_file", arguments:{path:"src/math.py", patch:"return a + b"}}] } ]
 ], null, 2);
 const EX_LABEL = "[0, 0, 1, 0]";
+const EX_TOOLS = JSON.stringify([
+  { type:"function", function:{ name:"read_file", description:"Read a file from the repo.",
+      parameters:{ type:"object", properties:{ path:{ type:"string" } }, required:["path"] } } },
+  { type:"function", function:{ name:"edit_file", description:"Apply an edit to a file.",
+      parameters:{ type:"object", properties:{ path:{ type:"string" }, patch:{ type:"string" } }, required:["path","patch"] } } }
+], null, 2);
 
 function normalizeRec(o){
   if(o && typeof o==='object'){
@@ -270,6 +276,7 @@ function doParse(){
   const pt = $('#promptInput').value.trim();
   const ct = $('#candInput').value.trim();
   const lt = $('#labelInput').value.trim();
+  const tt = $('#toolsInput').value.trim();
   $('#pasteErr').style.display = 'none';
   if(!pt && !ct){ fieldErr('请至少填写 prompt 或 candidates 其中之一。'); return; }
   let rec = {};
@@ -291,9 +298,16 @@ function doParse(){
     if(!Array.isArray(lv)){ fieldErr('label 应为数组,如 [0, 0, 1, 0]。'); return; }
     rec.labels = lv;
   }
+  if(tt){
+    let tv; try{ tv = JSON.parse(tt); }catch(e){ fieldErr('tools 解析失败:' + e.message); return; }
+    if(tv && typeof tv==='object' && !Array.isArray(tv) && tv.tools) tv = tv.tools;
+    if(tv && typeof tv==='object' && !Array.isArray(tv)) tv = [tv];   // 单个工具定义
+    if(!Array.isArray(tv)){ fieldErr('tools 应为工具定义数组 [ … ]。'); return; }
+    rec.tools = tv;
+  }
   rec = normalizeRec(rec);
   if(!Array.isArray(rec.prompt) && !Array.isArray(rec.candidates)){ fieldErr('未解析到有效的 prompt 或 candidates。'); return; }
-  LAST_INPUT = { p:pt, c:ct, l:lt };
+  LAST_INPUT = { p:pt, c:ct, l:lt, t:tt };
   RECORDS = [rec]; CUR = 0;
   $('#count').textContent = '';
   $('#reinput').style.display = '';
@@ -306,9 +320,9 @@ function showPasteUI(prefill){
   $('#main').innerHTML =
     `<div class="pastewrap">`
     + `<h2>粘贴单题数据(prompt 与 candidates 分开)</h2>`
-    + `<div class="hint">分别粘贴 <code>prompt</code>、<code>candidates</code>(也接受单数 <code>candidate</code> / 扁平消息列表)与 <code>label</code>。prompt 或 candidates 至少填其一,label 可选。<br>`
-    + `prompt 为消息数组 <code>[ … ]</code>,candidates 为 <code>[[ … ]]</code>,label 为与 prompt 对齐的数组 <code>[0,0,1,0]</code>(label=1 且含 thinking 的消息会在总览高亮)。`
-    + `若在 prompt 框粘贴整条记录(含 labels/meta),也会一并识别。</div>`
+    + `<div class="hint">分别粘贴 <code>prompt</code>、<code>candidates</code>(也接受单数 <code>candidate</code> / 扁平消息列表)、<code>label</code> 与 <code>tools</code>。prompt 或 candidates 至少填其一,label / tools 可选。<br>`
+    + `prompt 为消息数组 <code>[ … ]</code>,candidates 为 <code>[[ … ]]</code>,label 为与 prompt 对齐的数组 <code>[0,0,1,0]</code>,tools 为工具定义数组(<code>{name, description, parameters}</code> 或 <code>{type:"function", function:{…}}</code>)。`
+    + `若在 prompt 框粘贴整条记录(含 labels/tools/meta),也会一并识别。</div>`
     + `<div class="pgrid">`
     +   `<div class="pcol"><label>prompt<span class="tag">消息数组 [ … ]</span></label>`
     +     `<textarea id="promptInput" spellcheck="false" placeholder='[{"role":"system","content":[...]}, {"role":"user", ...}]'></textarea></div>`
@@ -317,6 +331,8 @@ function showPasteUI(prefill){
     + `</div>`
     + `<div class="pcol full"><label>label<span class="tag">与 prompt 对齐的数组,如 [0,0,1,0]</span></label>`
     +   `<textarea id="labelInput" spellcheck="false" placeholder='[0, 0, 1, 0]'></textarea></div>`
+    + `<div class="pcol full"><label>tools<span class="tag">工具定义数组 [ {name, description, parameters}, … ]</span></label>`
+    +   `<textarea id="toolsInput" spellcheck="false" placeholder='[{"type":"function","function":{"name":"read_file","description":"...","parameters":{...}}}]'></textarea></div>`
     + `<div id="pasteErr" class="perr"></div>`
     + `<div class="prow">`
     +   `<button class="btn" id="doParse">解析并渲染</button>`
@@ -326,9 +342,10 @@ function showPasteUI(prefill){
   $('#promptInput').value = prefill.p || '';
   $('#candInput').value = prefill.c || '';
   $('#labelInput').value = prefill.l || '';
+  $('#toolsInput').value = prefill.t || '';
   $('#doParse').onclick = doParse;
-  $('#loadEx').onclick = ()=>{ $('#promptInput').value = EX_PROMPT; $('#candInput').value = EX_CAND; $('#labelInput').value = EX_LABEL; $('#pasteErr').style.display='none'; };
-  $('#clearTa').onclick = ()=>{ $('#promptInput').value=''; $('#candInput').value=''; $('#labelInput').value=''; $('#pasteErr').style.display='none'; $('#promptInput').focus(); };
+  $('#loadEx').onclick = ()=>{ $('#promptInput').value = EX_PROMPT; $('#candInput').value = EX_CAND; $('#labelInput').value = EX_LABEL; $('#toolsInput').value = EX_TOOLS; $('#pasteErr').style.display='none'; };
+  $('#clearTa').onclick = ()=>{ $('#promptInput').value=''; $('#candInput').value=''; $('#labelInput').value=''; $('#toolsInput').value=''; $('#pasteErr').style.display='none'; $('#promptInput').focus(); };
   $('#promptInput').focus();
 }
 $('#reinput').onclick = ()=> showPasteUI(LAST_INPUT);
