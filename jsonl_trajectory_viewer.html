@@ -118,6 +118,14 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 details.reason{margin:6px 0}
 details.reason>summary{cursor:pointer;color:var(--muted);font-size:12px;user-select:none}
 .reason .blk{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+details.trans{margin:5px 0 8px}
+details.trans>summary{cursor:pointer;color:var(--accent);font-size:11.5px;font-weight:600;user-select:none;
+  display:inline-block;padding:2px 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+details.trans>summary:hover{background:var(--hover)}
+details.trans[open]>summary{margin-bottom:6px}
+.trans .tbody{white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.65;
+  background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:6px;padding:9px 12px}
+.trans .tbody.muted{color:var(--muted)}
 .tc{margin:6px 0;border:1px solid var(--border);border-radius:6px}
 .tc .tch{padding:5px 10px;background:var(--chip);font-size:12px;font-weight:600;border-bottom:1px solid var(--border)}
 .tc .tch code{color:var(--tool)}
@@ -164,6 +172,47 @@ const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt
 const g = (o,p,d)=>{ try{ return p.split('.').reduce((a,k)=>a&&a[k]!=null?a[k]:undefined,o) ?? d; }catch(e){ return d; } };
 const pj = v => { try{ return JSON.stringify(v,null,2); }catch(e){ return String(v); } };
 const num = n => (typeof n==='number')? n.toLocaleString('en-US') : n;
+
+/* ---------- translation (on-demand, collapsed) ---------- */
+let TSRC = [];            // tid -> source text (reset per record render)
+const TCACHE = {};        // source text -> translated
+function looksChinese(s){ const z=(s.match(/[一-鿿]/g)||[]).length; const a=(s.match(/[A-Za-z]/g)||[]).length; return z>=a; }
+function needsTrans(s){ s=String(s||''); if(s.trim().length<3) return false; if(!/[A-Za-z]{2,}/.test(s)) return false; return !looksChinese(s); }
+function transBlock(text){
+  if(!needsTrans(text)) return '';
+  const id = TSRC.push(String(text))-1;
+  return `<details class="trans" data-tid="${id}"><summary>🌐 翻译</summary><div class="tbody muted">展开以翻译…</div></details>`;
+}
+function chunkText(str,n){ const out=[]; let s=String(str); while(s.length>n){ let cut=s.lastIndexOf('\n',n); if(cut<n*0.5)cut=s.lastIndexOf('. ',n); if(cut<n*0.5)cut=n; out.push(s.slice(0,cut)); s=s.slice(cut);} if(s.length)out.push(s); return out; }
+async function fetchJSON(url,ms){ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms||6000);
+  try{ const r=await fetch(url,{signal:c.signal}); if(!r.ok) throw new Error('http '+r.status); return await r.json(); } finally{ clearTimeout(t); } }
+async function viaGoogle(text){ const parts=[];
+  for(const ck of chunkText(text,4000)){
+    const j=await fetchJSON('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q='+encodeURIComponent(ck),5000);
+    parts.push((j[0]||[]).map(x=>x[0]).join('')); }
+  return parts.join(''); }
+async function viaMyMemory(text){ const parts=[];
+  for(const ck of chunkText(text,450)){
+    const j=await fetchJSON('https://api.mymemory.translated.net/get?langpair=en|zh-CN&q='+encodeURIComponent(ck),9000);
+    parts.push((j.responseData&&j.responseData.translatedText)||''); }
+  return parts.join(''); }
+async function translateText(text){
+  if(TCACHE[text]!=null) return TCACHE[text];
+  let out;
+  try{ out=await viaGoogle(text); if(!out||!out.trim()) throw new Error('empty'); }
+  catch(e){ out=await viaMyMemory(text); }
+  TCACHE[text]=out; return out;
+}
+document.addEventListener('toggle', async e=>{
+  const d=e.target;
+  if(!(d.classList && d.classList.contains('trans') && d.open)) return;
+  if(d.dataset.done) return;
+  const body=d.querySelector('.tbody'); const src=TSRC[+d.dataset.tid];
+  if(src==null){ body.textContent='(无内容)'; return; }
+  body.classList.remove('muted'); body.textContent='翻译中…';
+  try{ body.textContent=await translateText(src); d.dataset.done='1'; }
+  catch(err){ body.classList.add('muted'); body.textContent='翻译失败:网络不可达(Google / MyMemory 均未响应)。点击「翻译」可重试。'; }
+}, true);
 
 /* ---------- file loading ---------- */
 $('#pick').onclick = ()=> $('#file').click();
@@ -226,6 +275,7 @@ function select(i){
 }
 /* ---------- record detail ---------- */
 function renderRecord(o){
+  TSRC = [];
   const m = o.meta || {};
   const passed = g(o,'meta.analysis.trajectory.passed');
   const cheat = g(o,'meta.analysis.trajectory.cheating');
@@ -338,10 +388,10 @@ function renderConversation(msgs, labels){
 }
 function contentToHtml(content){
   if(content==null) return '';
-  if(typeof content==='string') return `<div class="txt">${esc(content)}</div>`;
+  if(typeof content==='string') return `<div class="txt">${esc(content)}</div>`+transBlock(content);
   if(!Array.isArray(content)) return `<pre class="raw">${esc(pj(content))}</pre>`;
   return content.map(b=>{
-    if(b && b.type==='text') return `<div class="txt">${esc(b.text)}</div>`;
+    if(b && b.type==='text') return `<div class="txt">${esc(b.text)}</div>`+transBlock(b.text);
     if(b && typeof b==='object') return `<div class="stat">[${esc(b.type||'block')}]</div><pre class="raw">${esc(pj(b))}</pre>`;
     return `<div class="txt">${esc(b)}</div>`;
   }).join('');
@@ -359,7 +409,7 @@ function renderMsg(msg,i,lab){
   const reason = msg.reasoning_content;
   if(reason && String(reason).trim()){
     html += `<details class="reason"><summary>💭 思考过程 (${String(reason).length} 字)</summary>`
-      + `<div class="blk">${esc(reason)}</div></details>`;
+      + `<div class="blk">${esc(reason)}</div>` + transBlock(reason) + `</details>`;
   }
   html += contentToHtml(msg.content);
   (msg.tool_calls||[]).forEach(tc=>{
@@ -390,7 +440,7 @@ function renderTools(tools){
   return tools.map(t=>{
     const fn = t.function||t;
     return `<details class="tooldef"><summary>${esc(fn.name)}</summary>`
-      + `<div class="tb"><div class="txt">${esc(fn.description||'')}</div>`
+      + `<div class="tb"><div class="txt">${esc(fn.description||'')}</div>` + transBlock(fn.description||'')
       + (fn.parameters?`<pre class="raw">${esc(pj(fn.parameters))}</pre>`:'')
       + `</div></details>`;
   }).join('');
