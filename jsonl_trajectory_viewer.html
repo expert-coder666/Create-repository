@@ -442,9 +442,9 @@ function stepRawForAI(msg){
 }
 function _aiEndpoint(){
   let b=(AICFG.base||'').trim().replace(/\/+$/,'');
-  if(/\/chat\/completions$/.test(b)) return b;
-  if(/\/v1$/.test(b)) return b+'/chat/completions';
-  return b+'/v1/chat/completions';
+  if(/\/chat\/completions$/.test(b)) return b;              // 已是完整地址
+  if(/\/v\d+$/.test(b) || /\/api(\/|$)/.test(b)) return b+'/chat/completions'; // .../v1 .../api/v3 等
+  return b+'/v1/chat/completions';                          // 裸域名 → 补 /v1
 }
 async function callLLM(text){
   const r=await fetch(_aiEndpoint(),{method:'POST',
