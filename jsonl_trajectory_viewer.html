@@ -115,6 +115,10 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 .fcard.hl .frole{color:var(--warn)!important}
 .btag.think{background:var(--warn-bg);border-color:var(--label);color:var(--warn);font-weight:700}
 .fcard .fblocks{display:flex;flex-wrap:wrap;gap:5px}
+.fcard .fsummary{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;
+  line-height:1.55;color:var(--text);opacity:.9;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word}
+.fcard .fsummary .sk{color:var(--muted);font-weight:700;margin-right:4px}
 .btag{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);
   border-radius:6px;padding:2px 7px;color:var(--text)}
 .mbody{padding:10px 12px}
@@ -339,6 +343,47 @@ function blockTags(msg){
   if(!tags.length && c!=null) tags.push('content');
   return tags;
 }
+/* ---------- per-step auto summary (local heuristic, no network) ---------- */
+function _oneLine(s){ return String(s==null?'':s).replace(/\s+/g,' ').trim(); }
+function _msgText(c){
+  if(c==null) return '';
+  if(typeof c==='string') return c;
+  if(Array.isArray(c)) return c.filter(b=>b&&b.type==='text'&&b.text).map(b=>b.text).join(' ');
+  return '';
+}
+function stepSummary(msg){
+  const role = msg.role||'?';
+  const tcs = msg.tool_calls||[];
+  const parts = [];
+  // 1) tool calls — show tool name + a key argument
+  if(tcs.length){
+    tcs.forEach(tc=>{
+      const name = tc.name || (tc.function && tc.function.name) || '?';
+      let args = tc.arguments!=null ? tc.arguments : (tc.function && tc.function.arguments);
+      if(typeof args==='string'){ try{ args=JSON.parse(args); }catch(e){} }
+      let key='';
+      if(args && typeof args==='object'){
+        const v = args.command||args.cmd||args.path||args.file_path||args.filePath||args.query||args.pattern||args.url||args.new_str||args.old_str||args.content;
+        if(v!=null) key = _oneLine(typeof v==='string'?v:JSON.stringify(v)).slice(0,70);
+      }
+      parts.push(`调用 ${name}` + (key?` — ${key}`:''));
+    });
+    return {kind:'🔧', text: parts.join(' | ')};
+  }
+  // 2) tool result
+  if(role==='tool'){
+    const t=_oneLine(_msgText(msg.content));
+    return {kind:'📄', text: t? t.slice(0,160) : '(工具无文本返回)'};
+  }
+  // 3) assistant / user / system text
+  const t=_oneLine(_msgText(msg.content));
+  if(t) return {kind: role==='assistant'?'💬':(role==='user'?'🧑':'⚙️'), text: t.slice(0,180)};
+  // 4) thinking only
+  const r=_oneLine(msg.reasoning_content);
+  if(r) return {kind:'💭', text: r.slice(0,180)};
+  return {kind:'·', text:'(空内容)'};
+}
+
 function renderFlow(msgs, labels, cands){
   const wrap=document.createElement('div');
   const nLabel=labels.filter(x=>x).length;
@@ -362,7 +407,8 @@ function renderFlow(msgs, labels, cands){
     card.innerHTML=`<div class="fh"><span class="fn">#${i}</span>`
       +`<span class="frole" style="color:var(--${role==='assistant'?'asst':role})">${esc(role).toUpperCase()}</span>`
       +`<span class="flabel${lab?' on':''}">label=${lab}</span></div>`
-      +`<div class="fblocks">${tags.map(t=>`<span class="btag${t==='thinking'?' think':''}">${esc(t)}</span>`).join('')}</div>`;
+      +`<div class="fblocks">${tags.map(t=>`<span class="btag${t==='thinking'?' think':''}">${esc(t)}</span>`).join('')}</div>`
+      +(()=>{const s=stepSummary(m);return `<div class="fsummary"><span class="sk">${s.kind}</span>${esc(s.text)}</div>`;})();
     card.onclick=()=>{ TAB='conv'; renderRecord(RECORDS[CUR]); setTimeout(()=>{const el=$('#msgs')&&$('#msgs').children[i];if(el)el.scrollIntoView({block:'center'});},60); };
     grid.appendChild(card);
   });
