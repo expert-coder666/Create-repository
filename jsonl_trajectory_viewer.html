@@ -351,38 +351,69 @@ function _msgText(c){
   if(Array.isArray(c)) return c.filter(b=>b&&b.type==='text'&&b.text).map(b=>b.text).join(' ');
   return '';
 }
+function _basename(p){
+  p=String(p==null?'':p).replace(/\\/g,'/').replace(/\/+$/,'');
+  const b=p.split('/').pop();
+  return b||p;
+}
+function _firstSentence(s){
+  s=_oneLine(s); if(!s) return '';
+  const m=s.match(/^[\s\S]*?[。！？!?.](?=\s|$)/);
+  return (m?m[0]:s).slice(0,80);
+}
+const _TOOL_VERB = {
+  edit:'编辑', str_replace:'编辑', str_replace_editor:'编辑', str_replace_based_edit_tool:'编辑',
+  applypatch:'打补丁', apply_patch:'打补丁', multiedit:'批量编辑',
+  write:'写入', create:'新建文件', read:'读取', view:'查看',
+  grep:'检索', glob:'查找文件', ls:'列目录', find:'查找', search:'搜索',
+  bash:'执行命令', shell:'执行命令', run:'执行', python:'运行脚本', exec:'执行',
+  websearch:'联网搜索', web_search:'联网搜索', webfetch:'抓取网页', web_fetch:'抓取网页',
+  todowrite:'更新任务清单', todo_write:'更新任务清单', task:'派发子任务', notebookedit:'编辑Notebook'
+};
+function _toolPhrase(tc){
+  const name=(tc.name||(tc.function&&tc.function.name)||'?');
+  const verb=_TOOL_VERB[String(name).toLowerCase()]||('调用 '+name);
+  let args=tc.arguments!=null?tc.arguments:(tc.function&&tc.function.arguments);
+  if(typeof args==='string'){ try{ args=JSON.parse(args); }catch(e){} }
+  let obj='';
+  if(args && typeof args==='object'){
+    const cmd=args.command||args.cmd;
+    const path=args.file_path||args.path||args.filePath||args.notebook_path;
+    const pat=args.pattern||args.query||args.q;
+    if(cmd!=null) obj='「'+_oneLine(typeof cmd==='string'?cmd:JSON.stringify(cmd)).slice(0,44)+'」';
+    else if(pat!=null){ obj='“'+_oneLine(pat).slice(0,32)+'”'; if(path!=null) obj+=' 于《'+_basename(path)+'》'; }
+    else if(path!=null) obj='《'+_basename(path)+'》';
+    else if(args.url!=null) obj=_oneLine(args.url).slice(0,44);
+    else if(args.description!=null) obj=_oneLine(args.description).slice(0,40);
+  }
+  return verb+(obj?' '+obj:'');
+}
 function stepSummary(msg){
   const role = msg.role||'?';
   const tcs = msg.tool_calls||[];
-  const parts = [];
-  // 1) tool calls — show tool name + a key argument
+  // 1) tool calls → 动作短句
   if(tcs.length){
-    tcs.forEach(tc=>{
-      const name = tc.name || (tc.function && tc.function.name) || '?';
-      let args = tc.arguments!=null ? tc.arguments : (tc.function && tc.function.arguments);
-      if(typeof args==='string'){ try{ args=JSON.parse(args); }catch(e){} }
-      let key='';
-      if(args && typeof args==='object'){
-        const v = args.command||args.cmd||args.path||args.file_path||args.filePath||args.query||args.pattern||args.url||args.new_str||args.old_str||args.content;
-        if(v!=null) key = _oneLine(typeof v==='string'?v:JSON.stringify(v)).slice(0,70);
-      }
-      parts.push(`调用 ${name}` + (key?` — ${key}`:''));
-    });
-    return {kind:'🔧', text: parts.join(' | ')};
+    let txt=_toolPhrase(tcs[0]);
+    if(tcs.length>1) txt+=` 等 ${tcs.length} 项操作`;
+    return {kind:'🔧', text: txt};
   }
-  // 2) tool result
+  // 2) tool result → 结果含义
   if(role==='tool'){
-    const t=_oneLine(_msgText(msg.content));
-    return {kind:'📄', text: t? t.slice(0,160) : '(工具无文本返回)'};
+    const raw=_msgText(msg.content); const t=_oneLine(raw);
+    if(!t) return {kind:'📄', text:'(无文本返回)'};
+    if(/has been (updated|created)|updated successfully|已更新|已保存/i.test(t)) return {kind:'✅', text:'文件写入/更新成功'};
+    if(/^\s*(error|traceback|exception)|no such file|not found|no matches|command failed|错误|失败|报错/i.test(t)) return {kind:'⚠️', text:'返回错误/无结果 — '+t.slice(0,54)};
+    return {kind:'📄', text:`返回内容(约${raw.length}字)— `+t.slice(0,56)};
   }
-  // 3) assistant / user / system text
-  const t=_oneLine(_msgText(msg.content));
-  if(t) return {kind: role==='assistant'?'💬':(role==='user'?'🧑':'⚙️'), text: t.slice(0,180)};
-  // 4) thinking only
-  const r=_oneLine(msg.reasoning_content);
-  if(r) return {kind:'💭', text: r.slice(0,180)};
+  // 3) 有正文的 assistant/user/system → 首句
+  const t=_msgText(msg.content);
+  if(_oneLine(t)) return {kind: role==='assistant'?'💬':(role==='user'?'🧑':'⚙️'), text: _firstSentence(t)};
+  // 4) 仅思考 → 思考首句(意图)
+  const r=msg.reasoning_content;
+  if(_oneLine(r)) return {kind:'💭', text:'思考:'+_firstSentence(r)};
   return {kind:'·', text:'(空内容)'};
 }
+
 
 function renderFlow(msgs, labels, cands){
   const wrap=document.createElement('div');
