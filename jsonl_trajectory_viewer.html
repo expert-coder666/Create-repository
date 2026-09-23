@@ -149,6 +149,14 @@ pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menl
 .tooldef{border:1px solid var(--border);border-radius:6px;margin-bottom:8px}
 .tooldef summary{padding:7px 11px;cursor:pointer;font-weight:600;font-size:13px}
 .tooldef .tb{padding:0 11px 10px}
+/* AI 提炼 */
+.aiov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100}
+.aibox{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;width:min(460px,92vw);box-shadow:var(--shadow)}
+.aibox h3{margin:0 0 12px;font-size:15px}
+.aibox label{display:block;font-size:12px;color:var(--muted);margin-bottom:11px}
+.aibox input{width:100%;margin-top:4px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font-size:13px}
+.airow{display:flex;gap:8px;margin:4px 0 10px}
+.fcard .fsummary.ai{border-top-color:var(--accent);opacity:1}
 </style>
 </head>
 <body>
@@ -175,6 +183,9 @@ pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menl
 "use strict";
 const $ = s => document.querySelector(s);
 let RECORDS = [];      // parsed objects
+let AISUMM = {};       // record index -> [step -> ai summary]
+let AICFG = {};        // {base,key,model} persisted in localStorage
+try{ AICFG = JSON.parse(localStorage.getItem('tv_aicfg')||'{}'); }catch(e){ AICFG={}; }
 let CUR = -1;          // selected index
 let TAB = 'flow';
 
@@ -246,6 +257,7 @@ function loadFile(f){
 }
 function parseJSONL(text){
   RECORDS = [];
+  AISUMM = {};
   let bad = 0;
   text.split(/\r?\n/).forEach(line=>{
     line = line.trim(); if(!line) return;
@@ -413,6 +425,82 @@ function stepSummary(msg){
   if(_oneLine(r)) return {kind:'💭', text:'思考:'+_firstSentence(r)};
   return {kind:'·', text:'(空内容)'};
 }
+/* ---------- AI 提炼 (OpenAI 兼容接口, 逐步语义摘要) ---------- */
+function stepRawForAI(msg){
+  const role=msg.role||'?';
+  const lines=['角色: '+role];
+  if(msg.reasoning_content && String(msg.reasoning_content).trim())
+    lines.push('思考: '+_oneLine(msg.reasoning_content).slice(0,1600));
+  (msg.tool_calls||[]).forEach(tc=>{
+    let a=tc.arguments!=null?tc.arguments:(tc.function&&tc.function.arguments);
+    if(typeof a!=='string') a=pj(a);
+    lines.push('调用工具: '+(tc.name||(tc.function&&tc.function.name)||'?')+' | 参数: '+_oneLine(a).slice(0,700));
+  });
+  const t=_msgText(msg.content);
+  if(_oneLine(t)) lines.push((role==='tool'?'工具返回: ':'正文: ')+_oneLine(t).slice(0,1600));
+  return lines.join('\n');
+}
+function _aiEndpoint(){
+  let b=(AICFG.base||'').trim().replace(/\/+$/,'');
+  if(/\/chat\/completions$/.test(b)) return b;
+  if(/\/v1$/.test(b)) return b+'/chat/completions';
+  return b+'/v1/chat/completions';
+}
+async function callLLM(text){
+  const r=await fetch(_aiEndpoint(),{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+(AICFG.key||'')},
+    body:JSON.stringify({model:AICFG.model||'gpt-4o-mini',temperature:0,max_tokens:80,
+      messages:[
+        {role:'system',content:'你是 agent 轨迹分析助手。针对给你的“一步”内容,用一句不超过 30 字的中文短句,概括这一步在整个任务中的作用与意义(做了什么、目的是什么)。直接输出这句话,不要引号、不要“这一步”之类前缀、不要标点结尾。'},
+        {role:'user',content:text}
+      ]})});
+  if(!r.ok){ let d=''; try{d=(await r.text()).slice(0,120);}catch(e){} throw new Error('HTTP '+r.status+' '+d); }
+  const j=await r.json();
+  return _oneLine(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content||'');
+}
+async function aiSummarizeAll(msgs, grid, btn){
+  if(!AICFG.base){ openAICfg(); return; }
+  const cards=[].slice.call(grid.querySelectorAll('.fcard'));
+  AISUMM[CUR]=AISUMM[CUR]||[];
+  let done=0, fail=0, p=0; const N=msgs.length;
+  btn.disabled=true;
+  const paint=()=>{ btn.textContent = p>=N&&done>=N ? (fail?`🧠 完成(${fail} 失败,点重试)`:'🧠 已提炼 ✓') : `🧠 提炼中 ${done}/${N}`+(fail?` · 失败${fail}`:''); };
+  paint();
+  async function worker(){
+    while(p<N){
+      const i=p++;
+      const card=cards[i], el=card&&card.querySelector('.fsummary');
+      try{
+        const s=await callLLM(stepRawForAI(msgs[i]));
+        if(s){ AISUMM[CUR][i]=s; if(el){ el.className='fsummary ai'; el.innerHTML='<span class="sk">🧠</span>'+esc(s); } }
+      }catch(e){ fail++; if(el&&!AISUMM[CUR][i]) el.title='AI 提炼失败: '+e.message; }
+      done++; paint();
+    }
+  }
+  const CONC=Math.min(4,N)||1;
+  await Promise.all(Array.from({length:CONC},worker));
+  btn.disabled=false; paint();
+}
+function openAICfg(){
+  const old=$('#aicfgOv'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='aicfgOv'; ov.className='aiov';
+  ov.innerHTML=`<div class="aibox"><h3>🧠 AI 提炼设置(OpenAI 兼容接口)</h3>`
+    +`<label>接口地址 Base URL<input id="ai_base" placeholder="https://api.openai.com/v1 或 你的内部网关"></label>`
+    +`<label>API Key<input id="ai_key" type="password" placeholder="sk-..."></label>`
+    +`<label>模型 Model<input id="ai_model" placeholder="gpt-4o-mini"></label>`
+    +`<div class="airow"><button class="btn" id="ai_save">保存并启用</button><button class="btn sec" id="ai_cancel">取消</button></div>`
+    +`<div class="stat">配置仅存于本地浏览器 localStorage;提炼时会把每一步内容逐条发送到该接口。</div></div>`;
+  document.body.appendChild(ov);
+  $('#ai_base').value=AICFG.base||''; $('#ai_key').value=AICFG.key||''; $('#ai_model').value=AICFG.model||'';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  $('#ai_cancel').onclick=()=>ov.remove();
+  $('#ai_save').onclick=()=>{
+    AICFG={base:$('#ai_base').value.trim(),key:$('#ai_key').value.trim(),model:$('#ai_model').value.trim()||'gpt-4o-mini'};
+    localStorage.setItem('tv_aicfg',JSON.stringify(AICFG)); ov.remove();
+    if(CUR>=0) renderRecord(RECORDS[CUR]);
+  };
+}
+
 
 
 function renderFlow(msgs, labels, cands){
@@ -427,7 +515,10 @@ function renderFlow(msgs, labels, cands){
     +`<span class="flowlegend"><span class="dot" style="background:var(--sys)"></span>system`
     +`<span class="dot" style="background:var(--user)"></span>user`
     +`<span class="dot" style="background:var(--asst)"></span>assistant`
-    +`<span class="dot" style="background:var(--tool)"></span>tool</span></div>`;
+    +`<span class="dot" style="background:var(--tool)"></span>tool</span>`
+    +`<span style="flex:1"></span>`
+    +`<button class="btn sec" id="aiBtn" style="padding:5px 12px">🧠 AI 提炼</button>`
+    +`<button class="btn sec" id="aiCfg" title="AI 接口设置" style="padding:5px 10px">⚙️</button></div>`;
   const grid=document.createElement('div'); grid.className='flow';
   msgs.forEach((m,i)=>{
     const role=m.role||'?', lab=labels[i]||0;
@@ -435,15 +526,22 @@ function renderFlow(msgs, labels, cands){
     const hl = lab && hasThink;
     const card=document.createElement('div');
     card.className='fcard '+role+(hl?' hl':'');
+    const cached = AISUMM[CUR] && AISUMM[CUR][i];
+    const sumHtml = cached
+      ? `<div class="fsummary ai"><span class="sk">🧠</span>${esc(cached)}</div>`
+      : (()=>{const s=stepSummary(m);return `<div class="fsummary"><span class="sk">${s.kind}</span>${esc(s.text)}</div>`;})();
     card.innerHTML=`<div class="fh"><span class="fn">#${i}</span>`
       +`<span class="frole" style="color:var(--${role==='assistant'?'asst':role})">${esc(role).toUpperCase()}</span>`
       +`<span class="flabel${lab?' on':''}">label=${lab}</span></div>`
       +`<div class="fblocks">${tags.map(t=>`<span class="btag${t==='thinking'?' think':''}">${esc(t)}</span>`).join('')}</div>`
-      +(()=>{const s=stepSummary(m);return `<div class="fsummary"><span class="sk">${s.kind}</span>${esc(s.text)}</div>`;})();
+      +sumHtml;
     card.onclick=()=>{ TAB='conv'; renderRecord(RECORDS[CUR]); setTimeout(()=>{const el=$('#msgs')&&$('#msgs').children[i];if(el)el.scrollIntoView({block:'center'});},60); };
     grid.appendChild(card);
   });
   wrap.appendChild(grid);
+  const aiBtn=wrap.querySelector('#aiBtn'), aiCfg=wrap.querySelector('#aiCfg');
+  if(aiBtn) aiBtn.onclick=()=>aiSummarizeAll(msgs, grid, aiBtn);
+  if(aiCfg) aiCfg.onclick=()=>openAICfg();
   return wrap;
 }
 /* ---------- conversation ---------- */
