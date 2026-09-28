@@ -350,7 +350,7 @@ function showPasteUI(prefill){
 }
 $('#reinput').onclick = ()=> showPasteUI(LAST_INPUT);
 /* ---------- record helpers ---------- */
-function recTitle(o){ return g(o,'meta.instance_id') || g(o,'data_id') || '(单题)'; }
+function recTitle(o){ return g(o,'source_message_data_id') || g(o,'meta.source_message_data_id') || g(o,'meta.instance_id') || g(o,'data_id') || '(单题)'; }
 function recModel(o){ return g(o,'meta.teacher_model') || g(o,'model') || ''; }
 /* ---------- record detail ---------- */
 function renderRecord(o){
@@ -366,6 +366,7 @@ function renderRecord(o){
     model:'violet', language:'info', task:'info',
   };
   const chips = [
+    ['source_message_data_id', g(o,'source_message_data_id') || g(o,'meta.source_message_data_id')],
     ['data_id', g(o,'data_id')], ['instance', m.instance_id], ['language', m.language],
     ['task', m.task_type], ['reward', rew], ['model', m.teacher_model],
     ['scaffold', m.scaffold], ['category', o.category], ['tokens', num(m.token_cnt)],

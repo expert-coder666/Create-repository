@@ -45,7 +45,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 .rec{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;border-left:3px solid transparent}
 .rec:hover{background:var(--hover)}
 .rec.active{background:var(--accent-soft);border-left:3px solid var(--accent)}
-.rec .r1{display:flex;justify-content:space-between;gap:6px;font-weight:600}
+.rec .r1{display:flex;justify-content:space-between;gap:6px;font-weight:600;align-items:flex-start}
+.rec .r1 .t1{flex:1;min-width:0;word-break:break-all;line-height:1.4}
+.rec .r1 .stat{flex:none;white-space:nowrap}
 .rec .r2{color:var(--muted);font-size:12px;margin-top:3px;word-break:break-all}
 .rec .idx{color:var(--muted);font-weight:600;margin-right:6px;font-variant-numeric:tabular-nums}
 #main{flex:1;overflow-y:auto;padding:18px 22px}
@@ -269,7 +271,7 @@ function parseJSONL(text){
   if(RECORDS.length){ select(0); } else { $('#main').innerHTML='<div class="drop">没有可解析的记录</div>'; }
 }
 /* ---------- sidebar list ---------- */
-function recTitle(o){ return g(o,'meta.instance_id') || g(o,'data_id') || '(记录)'; }
+function recTitle(o){ return g(o,'source_message_data_id') || g(o,'meta.source_message_data_id') || g(o,'meta.instance_id') || g(o,'data_id') || '(记录)'; }
 function recModel(o){ return g(o,'meta.teacher_model') || g(o,'model') || ''; }
 function renderList(q){
   q = (q||'').toLowerCase();
@@ -278,12 +280,12 @@ function renderList(q){
     const title = recTitle(o), model = recModel(o);
     const lang = g(o,'meta.language',''), task = g(o,'meta.task_type','');
     const rew = g(o,'meta.reward');
-    const hay = (title+' '+model+' '+g(o,'data_id','')+' '+lang+' '+task).toLowerCase();
+    const hay = (title+' '+model+' '+g(o,'source_message_data_id','')+' '+g(o,'data_id','')+' '+lang+' '+task).toLowerCase();
     if(q && !hay.includes(q)) return;
     const el = document.createElement('div');
     el.className = 'rec' + (i===CUR?' active':'');
     el.dataset.i = i;
-    el.innerHTML = `<div class="r1"><span><span class="idx">#${i}</span>${esc(title)}</span>`
+    el.innerHTML = `<div class="r1"><span class="t1"><span class="idx">#${i}</span>${esc(title)}</span>`
       + (rew!=null?`<span class="stat">R=${esc(rew)}</span>`:'') + `</div>`
       + `<div class="r2">${esc([lang,task,model].filter(Boolean).join(' · '))}</div>`;
     el.onclick = ()=>select(i);
@@ -316,6 +318,7 @@ function renderRecord(o){
     model:'violet', language:'info', task:'info',
   };
   const chips = [
+    ['source_message_data_id', g(o,'source_message_data_id') || g(o,'meta.source_message_data_id')],
     ['data_id', g(o,'data_id')], ['instance', m.instance_id], ['language', m.language],
     ['task', m.task_type], ['reward', rew], ['model', m.teacher_model],
     ['scaffold', m.scaffold], ['category', o.category], ['tokens', num(m.token_cnt)],
