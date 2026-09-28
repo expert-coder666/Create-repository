@@ -49,6 +49,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 .rec .r1 .t1{flex:1;min-width:0;word-break:break-all;line-height:1.4}
 .rec .r1 .stat{flex:none;white-space:nowrap}
 .rec .r2{color:var(--muted);font-size:12px;margin-top:3px;word-break:break-all}
+.rec .lstat{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.rec .lchip{font-size:11px;line-height:1.5;padding:1px 7px;border-radius:10px;background:#fef3c7;color:#92400e;white-space:nowrap}
+.rec .lchip.hl{background:#fff;border:1px solid var(--label,#f59e0b);color:#b45309}
 .rec .idx{color:var(--muted);font-weight:600;margin-right:6px;font-variant-numeric:tabular-nums}
 #main{flex:1;overflow-y:auto;padding:18px 22px}
 .drop{margin:40px auto;max-width:560px;border:2px dashed var(--border);border-radius:12px;
@@ -273,6 +276,13 @@ function parseJSONL(text){
 /* ---------- sidebar list ---------- */
 function recTitle(o){ return g(o,'source_message_data_id') || g(o,'meta.source_message_data_id') || g(o,'meta.instance_id') || g(o,'data_id') || '(记录)'; }
 function recModel(o){ return g(o,'meta.teacher_model') || g(o,'model') || ''; }
+function recLabelStats(o){
+  const msgs = Array.isArray(o.prompt)?o.prompt:[];
+  const labels = Array.isArray(o.labels)?o.labels:[];
+  const nLabel = labels.filter(x=>x).length;
+  const nHL = msgs.filter((m,i)=>(labels[i]||0) && blockTags(m).includes('thinking')).length;
+  return {nLabel, nHL};
+}
 function renderList(q){
   q = (q||'').toLowerCase();
   const box = $('#reclist'); box.innerHTML='';
@@ -280,6 +290,7 @@ function renderList(q){
     const title = recTitle(o), model = recModel(o);
     const lang = g(o,'meta.language',''), task = g(o,'meta.task_type','');
     const rew = g(o,'meta.reward');
+    const {nLabel, nHL} = recLabelStats(o);
     const hay = (title+' '+model+' '+g(o,'source_message_data_id','')+' '+g(o,'data_id','')+' '+lang+' '+task).toLowerCase();
     if(q && !hay.includes(q)) return;
     const el = document.createElement('div');
@@ -287,7 +298,9 @@ function renderList(q){
     el.dataset.i = i;
     el.innerHTML = `<div class="r1"><span class="t1"><span class="idx">#${i}</span>${esc(title)}</span>`
       + (rew!=null?`<span class="stat">R=${esc(rew)}</span>`:'') + `</div>`
-      + `<div class="r2">${esc([lang,task,model].filter(Boolean).join(' · '))}</div>`;
+      + `<div class="r2">${esc([lang,task,model].filter(Boolean).join(' · '))}</div>`
+      + `<div class="lstat"><span class="lchip">${nLabel} 条 label=1</span>`
+      + `<span class="lchip hl">✨ ${nHL} 含 thinking</span></div>`;
     el.onclick = ()=>select(i);
     box.appendChild(el);
   });
