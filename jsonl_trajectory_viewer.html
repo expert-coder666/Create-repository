@@ -162,6 +162,20 @@ pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menl
 .aibox input{width:100%;margin-top:4px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font-size:13px}
 .airow{display:flex;gap:8px;margin:4px 0 10px}
 .fcard .fsummary.ai{border-top-color:var(--accent);opacity:1}
+/* label=1 质检面板 */
+.chkpanel{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--label,#f59e0b);border-radius:8px;padding:12px 14px;margin-bottom:12px}
+.chkpanel h3{margin:0 0 4px;font-size:13px}
+.chkpanel .chksub{font-size:11px;color:var(--muted);margin-bottom:9px}
+.chkrow{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--border);font-size:12px;line-height:1.5}
+.chkrow:first-of-type{border-top:none}
+.chkrow .cidx{flex:0 0 auto;font-weight:600;color:var(--muted);cursor:pointer;min-width:34px}
+.chkrow .cidx:hover{color:var(--accent);text-decoration:underline}
+.chkrow .cv{flex:0 0 auto;font-size:11px;padding:1px 8px;border-radius:10px;white-space:nowrap;font-weight:600}
+.chkrow .cv.ok{background:#dcfce7;color:#166534}
+.chkrow .cv.warn{background:#fef3c7;color:#92400e}
+.chkrow .cv.bad{background:#fee2e2;color:#991b1b}
+.chkrow .cv.pend{background:#e5e7eb;color:#6b7280}
+.chkrow .cmsg{flex:1;color:var(--text);word-break:break-word}
 </style>
 </head>
 <body>
@@ -189,6 +203,7 @@ pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menl
 const $ = s => document.querySelector(s);
 let RECORDS = [];      // parsed objects
 let AISUMM = {};       // record index -> [step -> ai summary]
+let AICHK = {};        // record index -> { idx -> {verdict, issue} }  label=1 质检结果
 let AICFG = {};        // {base,key,model} persisted in localStorage
 try{ AICFG = JSON.parse(localStorage.getItem('tv_aicfg')||'{}'); }catch(e){ AICFG={}; }
 let CUR = -1;          // selected index
@@ -263,10 +278,16 @@ function loadFile(f){
 function parseJSONL(text){
   RECORDS = [];
   AISUMM = {};
+  AICHK = {};
   let bad = 0;
   text.split(/\r?\n/).forEach(line=>{
     line = line.trim(); if(!line) return;
-    try{ RECORDS.push(JSON.parse(line)); }catch(e){ bad++; }
+    try{
+      const o = JSON.parse(line);
+      // 兼容: 有些文件把对话放在 messages 而非 prompt 下,这里做别名归一化
+      if(!Array.isArray(o.prompt) && Array.isArray(o.messages)) o.prompt = o.messages;
+      RECORDS.push(o);
+    }catch(e){ bad++; }
   });
   $('#count').textContent = `${RECORDS.length} 条记录` + (bad?` (${bad} 行解析失败)`:'');
   $('#sidebar').classList.remove('hidden');
@@ -462,17 +483,17 @@ function _aiEndpoint(){
   if(/\/v\d+$/.test(b) || /\/api(\/|$)/.test(b)) return b+'/chat/completions'; // .../v1 .../api/v3 等
   return b+'/v1/chat/completions';                          // 裸域名 → 补 /v1
 }
-async function callLLM(text){
+async function callLLMChat(system, user, maxTokens){
   const r=await fetch(_aiEndpoint(),{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+(AICFG.key||'')},
-    body:JSON.stringify({model:AICFG.model||'gpt-4o-mini',temperature:0,max_tokens:80,
-      messages:[
-        {role:'system',content:'你是 agent 轨迹分析助手。针对给你的“一步”内容,用一句不超过 30 字的中文短句,概括这一步在整个任务中的作用与意义(做了什么、目的是什么)。直接输出这句话,不要引号、不要“这一步”之类前缀、不要标点结尾。'},
-        {role:'user',content:text}
-      ]})});
+    body:JSON.stringify({model:AICFG.model||'gpt-4o-mini',temperature:0,max_tokens:maxTokens||80,
+      messages:[{role:'system',content:system},{role:'user',content:user}]})});
   if(!r.ok){ let d=''; try{d=(await r.text()).slice(0,120);}catch(e){} throw new Error('HTTP '+r.status+' '+d); }
   const j=await r.json();
-  return _oneLine(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content||'');
+  return j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content||'';
+}
+async function callLLM(text){
+  return _oneLine(await callLLMChat('你是 agent 轨迹分析助手。针对给你的“一步”内容,用一句不超过 30 字的中文短句,概括这一步在整个任务中的作用与意义(做了什么、目的是什么)。直接输出这句话,不要引号、不要“这一步”之类前缀、不要标点结尾。', text, 80));
 }
 async function aiSummarizeAll(msgs, grid, btn){
   if(!AICFG.base){ openAICfg(); return; }
@@ -496,6 +517,152 @@ async function aiSummarizeAll(msgs, grid, btn){
   const CONC=Math.min(4,N)||1;
   await Promise.all(Array.from({length:CONC},worker));
   btn.disabled=false; paint();
+}
+/* ---------- label=1 质检 (逐步质量检查) ---------- */
+const CHK_SYS = '你是 agent 训练数据质检员。给你一个被标注为训练正样本(label=1)的 assistant 步骤,及其前一步工具返回(如有)。请从6个维度审查这一步是否合格:①推理正确性 ②工具调用合理性 ③忠实性(结论是否与工具返回一致、有无思行脱节即“说要做却没做”)④任务约束遵从 ⑤有无作弊/走捷径(如偷看标准答案、对答案过拟合)⑥是否泄漏密钥等敏感信息。\n严格按两行输出,不要多余文字:\n判定: 合格|存疑|不合格\n问题: <一句话中文,20字内,指出主要问题;若无问题写“无”>';
+function stepRawForCheck(msgs, i){
+  const parts=[];
+  const prev=msgs[i-1];
+  if(prev && prev.role==='tool'){
+    const pt=_msgText(prev.content);
+    if(_oneLine(pt)) parts.push('【前一步工具返回】'+_oneLine(pt).slice(0,1200));
+  }
+  parts.push('【待检查步骤】\n'+stepRawForAI(msgs[i]));
+  return parts.join('\n');
+}
+function parseVerdict(s){
+  const t=String(s||'');
+  const vm=t.match(/判定[:：]?\s*(合格|存疑|不合格)/);
+  const im=t.match(/问题[:：]?\s*([^\n]*)/);
+  let verdict = vm?vm[1]:(/不合格/.test(t)?'不合格':(/存疑/.test(t)?'存疑':(/合格/.test(t)?'合格':'存疑')));
+  let issue = im?_oneLine(im[1]):_oneLine(t).slice(0,40);
+  if(!issue||/^无[。.]?$/.test(issue)) issue='无';
+  return {verdict, issue};
+}
+function _vClass(v){ return v==='合格'?'ok':(v==='不合格'?'bad':'warn'); }
+function _vRank(v){ return v==='不合格'?0:(v==='存疑'?1:2); }
+function renderChkPanel(wrap, idxs){
+  let panel=wrap.querySelector('#chkPanel');
+  if(!panel){
+    panel=document.createElement('div'); panel.id='chkPanel'; panel.className='chkpanel';
+    wrap.insertBefore(panel, wrap.firstChild);   // 置于该部分最前面
+  }
+  const done=idxs.filter(i=>AICHK[CUR]&&AICHK[CUR][i]).length;
+  const rows=idxs.slice().sort((a,b)=>{
+    const ra=AICHK[CUR]&&AICHK[CUR][a], rb=AICHK[CUR]&&AICHK[CUR][b];
+    const va=ra?_vRank(ra.verdict):9, vb=rb?_vRank(rb.verdict):9;
+    return va!==vb ? va-vb : a-b;               // 不合格/存疑 排在最前
+  });
+  const bad=idxs.filter(i=>AICHK[CUR]&&AICHK[CUR][i]&&AICHK[CUR][i].verdict==='不合格').length;
+  const warn=idxs.filter(i=>AICHK[CUR]&&AICHK[CUR][i]&&AICHK[CUR][i].verdict==='存疑').length;
+  panel.innerHTML=`<h3>🔍 label=1 质检 · ${done}/${idxs.length}`
+    +(done?` · <span style="color:#991b1b">不合格 ${bad}</span> · <span style="color:#92400e">存疑 ${warn}</span> · <span style="color:#166534">合格 ${done-bad-warn}</span>`:'')+`</h3>`
+    +`<div class="chksub">仅检查被标注为训练正样本的步骤;结果由所配置模型生成,供参考。点击序号跳到对话。</div>`
+    +rows.map(i=>{
+      const r=AICHK[CUR]&&AICHK[CUR][i];
+      const v=r?r.verdict:'检查中', cls=r?_vClass(r.verdict):'pend';
+      const msg=r?esc(r.issue):'…';
+      return `<div class="chkrow"><span class="cidx" data-i="${i}">#${i}</span>`
+        +`<span class="cv ${cls}">${esc(v)}</span><span class="cmsg">${msg}</span></div>`;
+    }).join('');
+  panel.querySelectorAll('.cidx').forEach(el=>{
+    el.onclick=()=>{ const i=+el.dataset.i; TAB='conv'; renderRecord(RECORDS[CUR]);
+      setTimeout(()=>{const t=$('#msgs')&&$('#msgs').children[i]; if(t)t.scrollIntoView({block:'center'});},60); };
+  });
+}
+async function aiCheckLabels(msgs, labels, wrap, btn){
+  if(!AICFG.base){ openAICfg(); return; }
+  const idxs=msgs.map((m,i)=>i).filter(i=>labels[i]);
+  if(!idxs.length){ btn.textContent='🔍 无 label=1'; return; }
+  AICHK[CUR]=AICHK[CUR]||{};
+  let done=0, fail=0, p=0; const N=idxs.length;
+  btn.disabled=true;
+  renderChkPanel(wrap, idxs);
+  const paint=()=>{ btn.textContent = done>=N ? (fail?`🔍 完成(${fail} 失败,点重检)`:'🔍 质检完成 ✓') : `🔍 质检中 ${done}/${N}`+(fail?` · 失败${fail}`:''); };
+  paint();
+  async function worker(){
+    while(p<N){
+      const k=p++, i=idxs[k];
+      try{
+        const raw=await callLLMChat(CHK_SYS, stepRawForCheck(msgs,i), 200);
+        AICHK[CUR][i]=parseVerdict(raw);
+      }catch(e){ fail++; AICHK[CUR][i]={verdict:'存疑', issue:'检查失败: '+_oneLine(e.message).slice(0,30)}; }
+      done++; renderChkPanel(wrap, idxs); paint();
+    }
+  }
+  const CONC=Math.min(3,N)||1;
+  await Promise.all(Array.from({length:CONC},worker));
+  btn.disabled=false; paint();
+}
+/* ---------- label=1 本地规则质检 (免模型, 纯浏览器) ---------- */
+function _tcText(m){
+  return (m.tool_calls||[]).map(tc=>{
+    let a=tc.arguments!=null?tc.arguments:(tc.function&&tc.function.arguments);
+    if(typeof a!=='string'){ try{a=pj(a);}catch(e){a=String(a);} }
+    return (tc.name||(tc.function&&tc.function.name)||'')+' '+a;
+  }).join('\n');
+}
+function ruleCheck(msgs, i, dupSet){
+  const m=msgs[i];
+  const reason=String(m.reasoning_content||'');
+  const text=_msgText(m.content)||'';
+  const tcs=m.tool_calls||[];
+  const tcText=_tcText(m);
+  const all=reason+'\n'+text+'\n'+tcText;
+  const issues=[]; let sev=0; const bump=s=>{ if(s>sev) sev=s; };
+  // 1. 密钥/凭证泄漏 (不合格)
+  if(/sk-[A-Za-z0-9_\-]{16,}|AKIA[0-9A-Z]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:AUTH_TOKEN|API_KEY|SECRET_KEY|ACCESS_KEY|PASSWORD)\s*[=:]\s*[^\s"']{8,}/.test(all)){
+    issues.push('疑似泄漏密钥/凭证'); bump(2);
+  }
+  // 2. 看标准答案/对答案过拟合 (不合格)
+  if(/标准答案|参考答案|\/app\/reference|reference[_\/\s]?answer|ground[_\s]?truth|expected[_\s]?output|answer\.(?:txt|json|md|py|csv)|solution\.(?:py|txt|json)|gold[_\s]?label/i.test(all)){
+    issues.push('疑似查看/对标准答案(作弊)'); bump(2);
+  }
+  // 3. 危险操作 (存疑)
+  if(/rm\s+-rf\s+\/|raise\s+SystemExit|sys\.exit\(|git\s+push\s+--force|--no-verify|:\(\)\s*\{[^}]*\};\s*:/.test(all)){
+    issues.push('含危险操作'); bump(1);
+  }
+  // 4. 思行脱节: 声称要调用却无 tool_calls (存疑)
+  if(m.role==='assistant' && !tcs.length){
+    const rt=reason+' '+text;
+    const plan=/将|会|接下来|下面|现在|准备|马上|下一步|我来|打算|首先|第一步/.test(rt);
+    const verb=/调用|执行|运行|读取|加载|打开|查看|使用|运行一下|跑一下/.test(rt);
+    const noun=/skill|工具|命令|脚本|文件|数据|目录|函数|接口|Bash|python|shell/i.test(rt);
+    if(plan && verb && noun){ issues.push('思行脱节:声称要调用工具却无 tool_calls'); bump(1); }
+  }
+  // 5. 工具报错却称成功 (存疑)
+  const prev=msgs[i-1];
+  if(prev && prev.role==='tool'){
+    const pt=_msgText(prev.content)||'';
+    if(/Traceback|Error|error:|Exception|failed|No such file|command not found|报错|失败|异常/i.test(pt)
+       && /成功|已完成|通过|正常运行|顺利|完成了|符合预期|没有?问题/.test(reason+text)){
+      issues.push('工具返回含报错,结论却称成功(忠实性存疑)'); bump(1);
+    }
+  }
+  // 6. 样板/重复 thinking (存疑)
+  if(dupSet && dupSet.has(i)){ issues.push('thinking 与其他步高度重复(疑似样板)'); bump(1); }
+  // 7. 超长反刍 thinking (存疑)
+  if(reason.length>8000){ issues.push('thinking 超长('+Math.round(reason.length/1000)+'k字),疑似反刍'); bump(1); }
+  // 8. 空/薄样本 (存疑)
+  if(!reason.trim() && !tcs.length && _oneLine(text).length<15){ issues.push('空/薄样本:无思考无工具、正文极短'); bump(1); }
+  // 9. 角色口径 (存疑)
+  if(m.role!=='assistant'){ issues.push('label=1 但角色为 '+(m.role||'?')+'(正样本通常应为 assistant)'); bump(1); }
+  const verdict=sev>=2?'不合格':(sev>=1?'存疑':'合格');
+  return {verdict, issue: issues.length?issues.join('; '):'无'};
+}
+function localCheckLabels(msgs, labels, wrap, btn){
+  const idxs=msgs.map((m,i)=>i).filter(i=>labels[i]);
+  if(!idxs.length){ btn.textContent='🔧 无 label=1'; return; }
+  // 跨步样板检测: 归一化 thinking 前 256 字, 出现 >=3 次判为样板
+  const norm=i=>_oneLine(String(msgs[i].reasoning_content||'')).slice(0,256);
+  const cnt={}; idxs.forEach(i=>{const k=norm(i); if(k) cnt[k]=(cnt[k]||0)+1;});
+  const dupSet=new Set(idxs.filter(i=>{const k=norm(i); return k&&cnt[k]>=3;}));
+  AICHK[CUR]={};
+  idxs.forEach(i=>{ AICHK[CUR][i]=ruleCheck(msgs, i, dupSet); });
+  renderChkPanel(wrap, idxs);
+  const bad=idxs.filter(i=>AICHK[CUR][i].verdict==='不合格').length;
+  const warn=idxs.filter(i=>AICHK[CUR][i].verdict==='存疑').length;
+  btn.textContent=`🔧 本地质检 ✓ (坏${bad}·疑${warn})`;
 }
 function openAICfg(){
   const old=$('#aicfgOv'); if(old) old.remove();
@@ -533,6 +700,8 @@ function renderFlow(msgs, labels, cands){
     +`<span class="dot" style="background:var(--asst)"></span>assistant`
     +`<span class="dot" style="background:var(--tool)"></span>tool</span>`
     +`<span style="flex:1"></span>`
+    +`<button class="btn sec" id="localChkBtn" style="padding:5px 12px" title="纯规则检查,不联网、不调模型">🔧 本地质检</button>`
+    +`<button class="btn sec" id="chkBtn" style="padding:5px 12px" title="用所配置模型检查 label=1 步骤质量">🔍 label=1 质检</button>`
     +`<button class="btn sec" id="aiBtn" style="padding:5px 12px">🧠 AI 提炼</button>`
     +`<button class="btn sec" id="aiCfg" title="AI 接口设置" style="padding:5px 10px">⚙️</button></div>`;
   const grid=document.createElement('div'); grid.className='flow';
@@ -555,9 +724,16 @@ function renderFlow(msgs, labels, cands){
     grid.appendChild(card);
   });
   wrap.appendChild(grid);
-  const aiBtn=wrap.querySelector('#aiBtn'), aiCfg=wrap.querySelector('#aiCfg');
+  const aiBtn=wrap.querySelector('#aiBtn'), aiCfg=wrap.querySelector('#aiCfg'), chkBtn=wrap.querySelector('#chkBtn'), localChkBtn=wrap.querySelector('#localChkBtn');
   if(aiBtn) aiBtn.onclick=()=>aiSummarizeAll(msgs, grid, aiBtn);
   if(aiCfg) aiCfg.onclick=()=>openAICfg();
+  if(chkBtn) chkBtn.onclick=()=>aiCheckLabels(msgs, labels, wrap, chkBtn);
+  if(localChkBtn) localChkBtn.onclick=()=>localCheckLabels(msgs, labels, wrap, localChkBtn);
+  // 若已有质检结果,重渲染时把面板恢复到最前面
+  if(AICHK[CUR] && Object.keys(AICHK[CUR]).length){
+    const idxs=msgs.map((m,i)=>i).filter(i=>labels[i]);
+    if(idxs.length) renderChkPanel(wrap, idxs);
+  }
   return wrap;
 }
 /* ---------- conversation ---------- */
