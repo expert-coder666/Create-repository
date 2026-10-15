@@ -58,14 +58,14 @@ tbody tr.row:hover,tbody tr.frow:hover,tbody tr.trow:hover{background:#f0f4ff}
 .toolbar input,.toolbar select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff;min-height:34px}
 .toolbar input{flex:1;min-width:200px}
 .pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11.5px;background:var(--chip)}
-.pill.bad{background:#fdecec;color:var(--bad)}.pill.ok{background:#e6f5ed;color:var(--ok)}
+.pill.warn{background:#fbf1de;color:var(--warn)}.pill.bad{background:#fdecec;color:var(--bad)}.pill.ok{background:#e6f5ed;color:var(--ok)}
 .q{max-width:560px}
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:30}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:#fff;z-index:31;padding:20px;overflow:auto;transform:translateX(100%);transition:transform .2s;box-shadow:-4px 0 20px rgba(0,0,0,.15)}
 .drawer.open{transform:none}
 .drawer h3{margin:0 0 4px;font-size:16px}
 .drawer .lab{margin:14px 0 4px;color:var(--muted);font-size:12px;font-weight:600}
-.drawer pre{white-space:pre-wrap;word-break:break-word;background:var(--chip);padding:10px;border-radius:6px;margin:0;font:inherit}
+.drawer .hint{color:var(--muted);font-size:12px;margin:4px 0 0}.drawer pre{white-space:pre-wrap;word-break:break-word;background:var(--chip);padding:10px;border-radius:6px;margin:0;font:inherit}
 .drawer .x{position:absolute;top:10px;right:14px;border:0;background:none;font-size:24px;cursor:pointer;color:var(--muted)}
 .drawer a{color:var(--accent);word-break:break-all}
 .drawer li{margin:3px 0}
@@ -95,7 +95,7 @@ tbody tr.row:hover,tbody tr.frow:hover,tbody tr.trow:hover{background:#f0f4ff}
         <option value="">全部答案状态</option>
         <option value="empty">参考答案为空</option>
         <option value="num">数值型答案</option>
-        <option value="text">文本型答案</option>
+        <option value="text">疑似异常答案（非纯数字）</option>
       </select>
     </div>
     <div class="tablewrap"><table id="taskTable"></table></div>
@@ -121,6 +121,7 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     t.dataFiles = t.files.filter((f) => f.name !== "README.docx");
     t.ansKind = t.refEmpty ? "empty" : t.numeric ? "num" : "text";
   });
+  const refPill = (t) => t.refEmpty ? `<span class="pill bad">空<\/span>` : t.ansKind === "text" ? `<span class="pill warn">${esc(t.ref)}<\/span>` : esc(t.ref);
   const empty = T.filter((t) => t.refEmpty).length;
   const state = { q: "", fam: "", ans: "", sort: { k: "id", dir: 1 } };
 
@@ -171,10 +172,10 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     const famRows = families.map((f) => ({ name: f.name, total: f.n, segs: [{ v: f.n - f.empty, cls: "ok" }, { v: f.empty, cls: "bad" }] }));
     const kinds = { num: 0, text: 0, empty: 0 };
     T.forEach((t) => kinds[t.ansKind]++);
-    const cols = { num: "#2f5bea", text: "#2e9e6a", empty: "#d64545" };
+    const cols = { num: "#2f5bea", text: "#c98a1b", empty: "#d64545" };
     let acc = 0;
     const stops = Object.keys(kinds).map((k) => { const s = acc; acc += (kinds[k] / T.length) * 100; return `${cols[k]} ${s}% ${acc}%`; }).join(",");
-    const lab = { num: "数值型答案", text: "文本型答案", empty: "参考答案为空" };
+    const lab = { num: "数值型答案", text: "非数字答案（疑似异常）", empty: "参考答案为空" };
     const ext = {};
     T.forEach((t) => t.files.forEach((f) => { ext[f.ext] = (ext[f.ext] || 0) + 1; }));
     const extRows = Object.entries(ext).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: "." + k, total: v, segs: [{ v, cls: "acc" }] }));
@@ -186,7 +187,7 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
       <div class="card"><h2>各数据集家族任务数<\/h2><div class="hint">绿 = 有参考答案，红 = 参考答案为空；点击一行筛选下方明细<\/div>${bars(famRows, { click: true })}<\/div>
       <div class="card"><h2>参考答案状态<\/h2><div class="donut-wrap"><div class="donut" style="background:conic-gradient(${stops})"><\/div>
         <div class="legend">${Object.keys(kinds).map((k) => `<div><span class="dot" style="background:${cols[k]}"><\/span>${lab[k]}：${kinds[k]}（${Math.round(kinds[k] / T.length * 100)}%）<\/div>`).join("")}<\/div><\/div>
-        <div class="hint" style="margin-top:10px">数值型 = 整串为数字/百分号；其余非空答案归为文本型<\/div><\/div>
+        <div class="hint" style="margin-top:10px">数值型 = 整串为数字/百分号；其余非空答案（如 "1."、"1997,"、一句话）多为截断或误写，归为疑似异常<\/div><\/div>
       <div class="card"><h2>参考文件类型（文件数，含每任务 README.docx）<\/h2>${bars(extRows)}<\/div>
       <div class="card"><h2>每任务参考文件数<\/h2>${bars(nfRows)}<\/div>
       <div class="card"><h2>题面长度分布（字符数）<\/h2>${hist(T.map((t) => t.qlen), [0, 100, 200, 300, 400, 500, 600], (a, b) => (b ? a + "-" + b : a + "+"))}<\/div>
@@ -214,7 +215,7 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     const urls = f.urls.length ? f.urls.map((u) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}<\/a><\/li>`).join("") : "<li>无<\/li>";
     const tasks = f.ts.map((t, k) => `<tr class="trow" data-id="${t.id}"><td class="idx">${k + 1}<\/td><td>${t.id}<\/td>
       <td>${esc(t.question.length > 90 ? t.question.slice(0, 90) + "…" : t.question)}<\/td>
-      <td>${t.refEmpty ? `<span class="pill bad">空<\/span>` : esc(t.ref)}<\/td><\/tr>`).join("");
+      <td>${refPill(t)}<\/td><\/tr>`).join("");
     $("drawer").innerHTML = `<button class="x" id="dx">×<\/button><h3>${i + 1}. ${esc(f.name)}<\/h3>
       <div><span class="pill">${f.n} 个任务<\/span> <span class="pill ${f.empty ? "bad" : "ok"}">答案为空 ${f.empty}<\/span><\/div>
       <div class="lab">数据文件（${fm.size}）<\/div><ul>${files}<\/ul>
@@ -263,8 +264,8 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     $("count").textContent = `${rows.length} / ${T.length}`;
     const arrow = (c) => (c === k ? (dir > 0 ? " ▲" : " ▼") : "");
     $("taskTable").innerHTML = `<thead><tr><th>#<\/th>${COLS.map(([c, l]) => `<th data-k="${c}">${l}${arrow(c)}<\/th>`).join("")}<\/tr><\/thead><tbody>` +
-      rows.map((t, n) => `<tr class="row" data-id="${t.id}"><td class="idx">${n + 1}<\/td><td>${t.id}<\/td><td class="q">${esc(t.question.length > 150 ? t.question.slice(0, 150) + "…" : t.question)}<\/td>
-        <td>${esc(t.family)}<\/td><td>${t.refEmpty ? `<span class="pill bad">空<\/span>` : esc(t.ref)}<\/td>
+      rows.map((t, n) => `<tr class="row" data-id="${t.id}"><td class="idx">${n + 1}<\/td><td><span class="lnk">${t.id}<\/span><\/td><td class="q">${esc(t.question.length > 150 ? t.question.slice(0, 150) + "…" : t.question)}<\/td>
+        <td>${esc(t.family)}<\/td><td>${refPill(t)}<\/td>
         <td>${t.files.length}<\/td><td>${kb(t.total)}<\/td><td>${t.qlen}<\/td><\/tr>`).join("") + `<\/tbody>`;
   }
 
@@ -273,9 +274,9 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     const files = t.files.map((f) => `<li>${esc(f.name)} · ${kb(f.size)}${f.sheets ? ` · ${f.sheets} 个工作表` : ""}<\/li>`).join("");
     const urls = t.urls.length ? t.urls.map((u) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}<\/a><\/li>`).join("") : "<li>无<\/li>";
     $("drawer").innerHTML = `<button class="x" id="dx">×<\/button><h3>任务 ${t.id}<\/h3>
-      <div><span class="pill">${esc(t.family)}<\/span> ${t.refEmpty ? `<span class="pill bad">参考答案为空<\/span>` : `<span class="pill ok">有参考答案<\/span>`}<\/div>
+      <div><span class="pill">${esc(t.family)}<\/span> ${t.refEmpty ? `<span class="pill bad">参考答案为空<\/span>` : t.ansKind === "text" ? `<span class="pill warn">答案疑似异常<\/span>` : `<span class="pill ok">有参考答案<\/span>`}<\/div>
       <div class="lab">题面<\/div><pre>${esc(t.question)}<\/pre>
-      <div class="lab">参考答案（tests/reference_answer.txt）<\/div><pre>${t.refEmpty ? "（空，0 字节）" : esc(t.ref)}<\/pre>
+      <div class="lab">参考答案（tests/reference_answer.txt）<\/div><pre>${t.refEmpty ? "（空，0 字节）" : esc(t.ref)}<\/pre>${t.refEmpty ? "" : `<div class="hint">文件内容共 ${t.ref.length} 个字符（已去首尾空白）。${t.ansKind === "text" ? "这不是一个完整答案，很可能被截断或误写；评分时仍会拿它去比对。" : ""}<\/div>`}
       <div class="lab">参考文件（${t.files.length}）<\/div><ul>${files}<\/ul>
       <div class="lab">README 中的来源链接<\/div><ul>${urls}<\/ul>
       <div class="lab">目录<\/div><pre>${esc(t.dir)}<\/pre>`;
