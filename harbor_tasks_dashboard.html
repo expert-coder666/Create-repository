@@ -46,8 +46,13 @@ main{max-width:1280px;margin:0 auto;padding:18px 24px 40px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{color:var(--muted);font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;user-select:none}
-tbody tr.row{cursor:pointer}
-tbody tr.row:hover{background:#f0f4ff}
+tbody tr.row,tbody tr.frow,tbody tr.trow{cursor:pointer}
+tbody tr.row:hover,tbody tr.frow:hover,tbody tr.trow:hover{background:#f0f4ff}
+.idx{color:var(--muted);width:36px;text-align:right}
+.lnk{color:var(--accent);cursor:pointer;text-decoration:underline dotted}
+.pill.lnk{text-decoration:none;cursor:pointer}
+.drawer table{font-size:12.5px}
+.gobtn{margin-top:16px;padding:9px 14px;border:0;border-radius:6px;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;min-height:38px}
 .tablewrap{overflow-x:auto}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .toolbar input,.toolbar select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff;min-height:34px}
@@ -190,11 +195,35 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
 
   function renderFamilies() {
     const dom = (u) => { try { return new URL(u).hostname; } catch (e) { return u; } };
-    $("famTable").innerHTML = `<thead><tr><th>数据集<\/th><th>任务数<\/th><th>答案为空<\/th><th>数据文件<\/th><th>最大体积<\/th><th>README 来源域名<\/th><\/tr><\/thead><tbody>` +
-      families.map((f) => `<tr><td><b>${esc(f.name)}<\/b><\/td><td>${f.n}<\/td>
-        <td>${f.empty ? `<span class="pill bad">${f.empty}<\/span>` : `<span class="pill ok">0<\/span>`}<\/td>
+    $("famTable").innerHTML = `<thead><tr><th>#<\/th><th>数据集<\/th><th>任务数<\/th><th>答案为空<\/th><th>数据文件<\/th><th>最大体积<\/th><th>README 来源域名<\/th><\/tr><\/thead><tbody>` +
+      families.map((f, i) => `<tr class="frow" data-fi="${i}"><td class="idx">${i + 1}<\/td><td><b class="lnk">${esc(f.name)}<\/b><\/td>
+        <td><span class="lnk" data-fam="${esc(f.name)}" data-ans="">${f.n}<\/span><\/td>
+        <td>${f.empty ? `<span class="pill bad lnk" data-fam="${esc(f.name)}" data-ans="empty">${f.empty}<\/span>` : `<span class="pill ok">0<\/span>`}<\/td>
         <td>${f.files.map(esc).join("<br>")}<\/td><td>${kb(f.size)}<\/td>
         <td>${[...new Set(f.urls.map(dom))].map(esc).join("<br>") || "—"}<\/td><\/tr>`).join("") + `<\/tbody>`;
+  }
+
+  function openFamily(i) {
+    const f = families[i];
+    const fm = new Map();
+    f.ts.forEach((t) => t.files.forEach((x) => {
+      const o = fm.get(x.name) || { size: 0, sheets: null };
+      o.size = Math.max(o.size, x.size); if (x.sheets) o.sheets = x.sheets; fm.set(x.name, o);
+    }));
+    const files = [...fm].map(([n, o]) => `<li>${esc(n)} · ${kb(o.size)}${o.sheets ? ` · ${o.sheets} 个工作表` : ""}<\/li>`).join("");
+    const urls = f.urls.length ? f.urls.map((u) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}<\/a><\/li>`).join("") : "<li>无<\/li>";
+    const tasks = f.ts.map((t, k) => `<tr class="trow" data-id="${t.id}"><td class="idx">${k + 1}<\/td><td>${t.id}<\/td>
+      <td>${esc(t.question.length > 90 ? t.question.slice(0, 90) + "…" : t.question)}<\/td>
+      <td>${t.refEmpty ? `<span class="pill bad">空<\/span>` : esc(t.ref)}<\/td><\/tr>`).join("");
+    $("drawer").innerHTML = `<button class="x" id="dx">×<\/button><h3>${i + 1}. ${esc(f.name)}<\/h3>
+      <div><span class="pill">${f.n} 个任务<\/span> <span class="pill ${f.empty ? "bad" : "ok"}">答案为空 ${f.empty}<\/span><\/div>
+      <div class="lab">数据文件（${fm.size}）<\/div><ul>${files}<\/ul>
+      <div class="lab">README 中的来源链接（${f.urls.length}）<\/div><ul>${urls}<\/ul>
+      <div class="lab">包含的任务（点击查看详情）<\/div>
+      <table><thead><tr><th>#<\/th><th>任务 ID<\/th><th>题面<\/th><th>参考答案<\/th><\/tr><\/thead><tbody>${tasks}<\/tbody><\/table>
+      <div class="btn-row"><button class="gobtn" data-fam="${esc(f.name)}" data-ans="">在任务明细中筛选此数据集<\/button><\/div>`;
+    $("drawer").classList.add("open"); $("ov").style.display = "block";
+    $("drawer").scrollTop = 0;
   }
 
   function setupFilters() {
@@ -233,8 +262,8 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
     });
     $("count").textContent = `${rows.length} / ${T.length}`;
     const arrow = (c) => (c === k ? (dir > 0 ? " ▲" : " ▼") : "");
-    $("taskTable").innerHTML = `<thead><tr>${COLS.map(([c, l]) => `<th data-k="${c}">${l}${arrow(c)}<\/th>`).join("")}<\/tr><\/thead><tbody>` +
-      rows.map((t) => `<tr class="row" data-id="${t.id}"><td>${t.id}<\/td><td class="q">${esc(t.question.length > 150 ? t.question.slice(0, 150) + "…" : t.question)}<\/td>
+    $("taskTable").innerHTML = `<thead><tr><th>#<\/th>${COLS.map(([c, l]) => `<th data-k="${c}">${l}${arrow(c)}<\/th>`).join("")}<\/tr><\/thead><tbody>` +
+      rows.map((t, n) => `<tr class="row" data-id="${t.id}"><td class="idx">${n + 1}<\/td><td>${t.id}<\/td><td class="q">${esc(t.question.length > 150 ? t.question.slice(0, 150) + "…" : t.question)}<\/td>
         <td>${esc(t.family)}<\/td><td>${t.refEmpty ? `<span class="pill bad">空<\/span>` : esc(t.ref)}<\/td>
         <td>${t.files.length}<\/td><td>${kb(t.total)}<\/td><td>${t.qlen}<\/td><\/tr>`).join("") + `<\/tbody>`;
   }
@@ -261,6 +290,12 @@ const HARBOR_DATA = {"generated": "2026-10-15", "source": "/Users/zhengbaoying/D
       const k = th.dataset.k;
       state.sort.dir = state.sort.k === k ? -state.sort.dir : 1; state.sort.k = k; return renderTasks();
     }
+    const lk = el.closest("[data-fam]");
+    if (lk) { closeDrawer(); return setFilter(lk.dataset.fam, lk.dataset.ans); }
+    const trw = el.closest("tr.trow");
+    if (trw) return openDrawer(trw.dataset.id);
+    const fr = el.closest("tr.frow");
+    if (fr && !el.closest("a")) return openFamily(+fr.dataset.fi);
     const tr = el.closest("tr.row");
     if (tr) return openDrawer(tr.dataset.id);
     const br = el.closest(".bar-row.click");
