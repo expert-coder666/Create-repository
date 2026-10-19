@@ -201,7 +201,13 @@ pre.raw{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menl
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-let RECORDS = [];      // parsed objects
+let RECORDS = [];      // stubs: {s,e (byte range in file), o (parsed, only for small files), sum (sidebar summary)}
+let CURREC = null;     // parsed object of the selected record
+let CURFILE = null;    // File currently loaded (large files are re-read lazily per record)
+let LOADSEQ = 0, SELSEQ = 0;
+const RESIDENT_MAX = 128*1024*1024;  // files above this size keep only line offsets + summaries in memory
+const CHUNK = 16*1024*1024;          // bytes read per slice
+const MAXROWS = 1000;                // max sidebar rows rendered at once
 let AISUMM = {};       // record index -> [step -> ai summary]
 let AICHK = {};        // record index -> { idx -> {verdict, issue} }  label=1 质检结果
 let AICFG = {};        // {base,key,model} persisted in localStorage
@@ -264,35 +270,85 @@ document.addEventListener('click', e=>{
 
 /* ---------- file loading ---------- */
 $('#pick').onclick = ()=> $('#file').click();
-$('#file').onchange = e => { const f=e.target.files[0]; if(f) loadFile(f); };
+$('#file').onchange = e => { const f=e.target.files[0]; e.target.value=''; if(f) loadFile(f); };
 const drop = $('#drop');
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'){const f=e.dataTransfer.files[0];if(f)loadFile(f);}drop.classList.remove('over');}));
 
-function loadFile(f){
-  $('#fname').textContent = f.name;
-  const r = new FileReader();
-  r.onload = () => { parseJSONL(r.result); };
-  r.readAsText(f);
+const fmtSize = n => n>=1073741824 ? (n/1073741824).toFixed(2)+' GB' : n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.ceil(n/1024)+' KB';
+const concatBytes = ps => { let n=0; for(const p of ps) n+=p.length; const out=new Uint8Array(n); let o=0; for(const p of ps){ out.set(p,o); o+=p.length; } return out; };
+// 兼容: 有些文件把对话放在 messages 而非 prompt 下,这里做别名归一化
+function normRec(o){ if(!Array.isArray(o.prompt) && Array.isArray(o.messages)) o.prompt = o.messages; return o; }
+
+/* 按块读取并按字节切行,避免把整个文件一次性读成字符串(大文件会超出字符串长度上限/撑爆内存) */
+async function scanLines(f, onLine, onChunkDone, cancelled){
+  let pos = 0, lineStart = 0, parts = [];
+  while(pos < f.size){
+    if(cancelled()) return false;
+    const buf = new Uint8Array(await f.slice(pos, Math.min(pos+CHUNK, f.size)).arrayBuffer());
+    let i = 0;
+    while(i < buf.length){
+      const nl = buf.indexOf(10, i);
+      if(nl < 0){ parts.push(buf.subarray(i)); break; }
+      let bytes = buf.subarray(i, nl);
+      if(parts.length){ parts.push(bytes); bytes = concatBytes(parts); parts = []; }
+      onLine(bytes, lineStart, pos+nl);
+      lineStart = pos+nl+1; i = nl+1;
+    }
+    pos += buf.length;
+    if(buf.length === 0) break;
+    onChunkDone(pos);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  if(parts.length) onLine(concatBytes(parts), lineStart, f.size);
+  return true;
 }
-function parseJSONL(text){
-  RECORDS = [];
-  AISUMM = {};
-  AICHK = {};
-  let bad = 0;
-  text.split(/\r?\n/).forEach(line=>{
-    line = line.trim(); if(!line) return;
-    try{
-      const o = JSON.parse(line);
-      // 兼容: 有些文件把对话放在 messages 而非 prompt 下,这里做别名归一化
-      if(!Array.isArray(o.prompt) && Array.isArray(o.messages)) o.prompt = o.messages;
-      RECORDS.push(o);
-    }catch(e){ bad++; }
-  });
-  $('#count').textContent = `${RECORDS.length} 条记录` + (bad?` (${bad} 行解析失败)`:'');
+async function loadFile(f){
+  const seq = ++LOADSEQ;
+  SELSEQ++;
+  CURFILE = f; RECORDS = []; CURREC = null; CUR = -1;
+  AISUMM = {}; AICHK = {};
+  const resident = f.size <= RESIDENT_MAX;
+  const dec = new TextDecoder('utf-8');
+  let bad = 0, rendered = 0, selected = false;
+  $('#fname').textContent = `${f.name} (${fmtSize(f.size)})`;
+  $('#count').textContent = '读取中…';
   $('#sidebar').classList.remove('hidden');
-  renderList('');
-  if(RECORDS.length){ select(0); } else { $('#main').innerHTML='<div class="drop">没有可解析的记录</div>'; }
+  $('#reclist').innerHTML = '';
+  const status = (done, pct) => {
+    $('#count').textContent = `${RECORDS.length} 条记录` + (bad?` (${bad} 行解析失败)`:'') + (done?'':` · 读取中 ${pct}%`);
+  };
+  const onLine = (bytes, s, e) => {
+    const line = dec.decode(bytes).trim();
+    if(!line) return;
+    try{
+      const o = normRec(JSON.parse(line));
+      RECORDS.push({s, e, o: resident ? o : null, sum: summarize(o)});
+    }catch(err){ bad++; }
+  };
+  const onChunkDone = pos => {
+    status(false, Math.floor(pos / f.size * 100));
+    if(rendered < MAXROWS){ renderList($('#recsearch').value); rendered = RECORDS.length; }
+    if(!selected && RECORDS.length){ selected = true; select(0); }
+  };
+  try{
+    const ok = await scanLines(f, onLine, onChunkDone, ()=>seq!==LOADSEQ);
+    if(!ok || seq!==LOADSEQ) return;
+  }catch(err){
+    if(seq!==LOADSEQ) return;
+    $('#count').textContent = `读取失败: ${err && err.message || err}`;
+    return;
+  }
+  status(true);
+  renderList($('#recsearch').value);
+  if(!selected){
+    if(RECORDS.length){ select(0); } else { $('#main').innerHTML='<div class="drop">没有可解析的记录</div>'; }
+  }
+}
+async function getRecord(i){
+  const r = RECORDS[i];
+  if(r.o) return r.o;
+  return normRec(JSON.parse((await CURFILE.slice(r.s, r.e).text()).trim()));
 }
 /* ---------- sidebar list ---------- */
 function recTitle(o){ return g(o,'source_message_data_id') || g(o,'meta.source_message_data_id') || g(o,'meta.instance_id') || g(o,'data_id') || '(记录)'; }
@@ -304,16 +360,24 @@ function recLabelStats(o){
   const nHL = msgs.filter((m,i)=>(labels[i]||0) && blockTags(m).includes('thinking')).length;
   return {nLabel, nHL};
 }
+function summarize(o){
+  const title = recTitle(o), model = recModel(o);
+  const lang = g(o,'meta.language',''), task = g(o,'meta.task_type','');
+  let st; try{ st = recLabelStats(o); }catch(e){ st = {nLabel:0, nHL:0}; }
+  const hay = (title+' '+model+' '+g(o,'source_message_data_id','')+' '+g(o,'data_id','')+' '+lang+' '+task).toLowerCase();
+  return {title, model, lang, task, rew:g(o,'meta.reward'), nLabel:st.nLabel, nHL:st.nHL, hay};
+}
 function renderList(q){
   q = (q||'').toLowerCase();
   const box = $('#reclist'); box.innerHTML='';
-  RECORDS.forEach((o,i)=>{
-    const title = recTitle(o), model = recModel(o);
-    const lang = g(o,'meta.language',''), task = g(o,'meta.task_type','');
-    const rew = g(o,'meta.reward');
-    const {nLabel, nHL} = recLabelStats(o);
-    const hay = (title+' '+model+' '+g(o,'source_message_data_id','')+' '+g(o,'data_id','')+' '+lang+' '+task).toLowerCase();
+  const frag = document.createDocumentFragment();
+  let shown = 0, matched = 0;
+  RECORDS.forEach((r,i)=>{
+    const {title, model, lang, task, rew, nLabel, nHL, hay} = r.sum;
     if(q && !hay.includes(q)) return;
+    matched++;
+    if(shown >= MAXROWS) return;
+    shown++;
     const el = document.createElement('div');
     el.className = 'rec' + (i===CUR?' active':'');
     el.dataset.i = i;
@@ -323,8 +387,16 @@ function renderList(q){
       + `<div class="lstat"><span class="lchip">${nLabel} 条 label=1</span>`
       + `<span class="lchip hl">✨ ${nHL} 含 thinking</span></div>`;
     el.onclick = ()=>select(i);
-    box.appendChild(el);
+    frag.appendChild(el);
   });
+  if(matched > shown){
+    const more = document.createElement('div');
+    more.className = 'r2';
+    more.style.padding = '10px 12px';
+    more.textContent = `仅显示前 ${shown} 条(共匹配 ${matched} 条),请用搜索缩小范围`;
+    frag.appendChild(more);
+  }
+  box.appendChild(frag);
 }
 $('#recsearch').oninput = e => renderList(e.target.value);
 document.addEventListener('keydown',e=>{
@@ -332,11 +404,22 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowDown' && CUR<RECORDS.length-1){ e.preventDefault(); select(CUR+1); }
   if(e.key==='ArrowUp' && CUR>0){ e.preventDefault(); select(CUR-1); }
 });
-function select(i){
-  CUR = i; renderList($('#recsearch').value);
+async function select(i){
+  const seq = ++SELSEQ;
+  CUR = i;
+  document.querySelectorAll('#reclist .rec.active').forEach(e=>e.classList.remove('active'));
   const el = document.querySelector('.rec[data-i="'+i+'"]');
-  if(el) el.scrollIntoView({block:'nearest'});
-  renderRecord(RECORDS[i]);
+  if(el){ el.classList.add('active'); el.scrollIntoView({block:'nearest'}); }
+  let o;
+  try{ o = await getRecord(i); }
+  catch(err){
+    if(seq!==SELSEQ) return;
+    $('#main').innerHTML = '<div class="drop">读取记录失败:'+esc(err && err.message || err)+'<br><span style="font-size:12px">文件可能已被移动或修改,请重新选择文件</span></div>';
+    return;
+  }
+  if(seq!==SELSEQ) return;
+  CURREC = o;
+  renderRecord(o);
 }
 /* ---------- record detail ---------- */
 function renderRecord(o){
@@ -566,7 +649,7 @@ function renderChkPanel(wrap, idxs){
         +`<span class="cv ${cls}">${esc(v)}</span><span class="cmsg">${msg}</span></div>`;
     }).join('');
   panel.querySelectorAll('.cidx').forEach(el=>{
-    el.onclick=()=>{ const i=+el.dataset.i; TAB='conv'; renderRecord(RECORDS[CUR]);
+    el.onclick=()=>{ const i=+el.dataset.i; TAB='conv'; renderRecord(CURREC);
       setTimeout(()=>{const t=$('#msgs')&&$('#msgs').children[i]; if(t)t.scrollIntoView({block:'center'});},60); };
   });
 }
@@ -680,7 +763,7 @@ function openAICfg(){
   $('#ai_save').onclick=()=>{
     AICFG={base:$('#ai_base').value.trim(),key:$('#ai_key').value.trim(),model:$('#ai_model').value.trim()||'gpt-4o-mini'};
     localStorage.setItem('tv_aicfg',JSON.stringify(AICFG)); ov.remove();
-    if(CUR>=0) renderRecord(RECORDS[CUR]);
+    if(CUR>=0 && CURREC) renderRecord(CURREC);
   };
 }
 
@@ -720,7 +803,7 @@ function renderFlow(msgs, labels, cands){
       +`<span class="flabel${lab?' on':''}">label=${lab}</span></div>`
       +`<div class="fblocks">${tags.map(t=>`<span class="btag${t==='thinking'?' think':''}">${esc(t)}</span>`).join('')}</div>`
       +sumHtml;
-    card.onclick=()=>{ TAB='conv'; renderRecord(RECORDS[CUR]); setTimeout(()=>{const el=$('#msgs')&&$('#msgs').children[i];if(el)el.scrollIntoView({block:'center'});},60); };
+    card.onclick=()=>{ TAB='conv'; renderRecord(CURREC); setTimeout(()=>{const el=$('#msgs')&&$('#msgs').children[i];if(el)el.scrollIntoView({block:'center'});},60); };
     grid.appendChild(card);
   });
   wrap.appendChild(grid);
