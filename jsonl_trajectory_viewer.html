@@ -889,7 +889,8 @@ function renderMsg(msg,i,lab){
   }
   html += contentToHtml(msg.content);
   (msg.tool_calls||[]).forEach(tc=>{
-    const args = (typeof tc.arguments==='string')? tc.arguments : pj(tc.arguments);
+    const a = tc.arguments!=null ? tc.arguments : (tc.function && tc.function.arguments);
+    const args = (typeof a==='string')? a : pj(a);
     html += `<div class="tc"><div class="tch">🔧 调用 <code>${esc(tc.name||tc.function&&tc.function.name)}</code></div>`
       + `<pre class="raw">${esc(args)}</pre></div>`;
   });
