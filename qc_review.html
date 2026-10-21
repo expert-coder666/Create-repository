@@ -244,8 +244,13 @@ function initFilters(){
     h("div",{id:"items"}));
 }
 function onFlt(){
+  const old=S.flt.code;
   S.flt={code:$("#fCode").value,st:$("#fSt").value,split:$("#fSplit").value,q:$("#fQ").value.trim().toLowerCase()};
   applyFilter();
+  if(!S.sum.length)return;
+  // 当前样本被筛掉就跳到首条，否则仅在检查项筛选变化时重渲染右侧（聚焦模式变了）
+  if(!S.view.some(s=>s.k===S.cur))select(S.view.length?S.view[0].k:-1);
+  else if(S.cur>=0&&old!==S.flt.code)select(S.cur);
 }
 function applyFilter(){
   const f=S.flt;
@@ -303,6 +308,8 @@ function nextTodo(){
 
 const textOf=c=>typeof c==="string"?c:Array.isArray(c)?c.map(b=>b&&b.text!=null?b.text:b&&b.type?`[${b.type}]`:JSON.stringify(b)).join("\n"):c==null?"":JSON.stringify(c);
 const nm=k=>S.names[k]?`${S.names[k].code} ${S.names[k].item}`:k;
+// 只有左侧筛选了具体检查项时才聚焦该项；选「全部检查项」时返回 null，右侧一律平等展示不加蓝圈
+const fkey=sum=>S.flt.code?sum.key:null;
 function longPre(text,cls,lim=3000){
   const p=h("pre",{class:cls||""});
   if(text.length<=lim){p.textContent=text;return p}
@@ -341,6 +348,7 @@ function overview(row,sum,items){
   const nu=steps.filter(it=>!inf.get(it.n).judged).length;
   const nk=steps.filter(it=>inf.get(it.n).bad.includes(sum.key)).length;
   const agg={};bads.forEach(it=>inf.get(it.n).bad.forEach(k=>agg[k]=(agg[k]||0)+1));
+  const fk=fkey(sum);
   const strip=h("div",{class:"sstrip"},steps.map(it=>{
     const d=inf.get(it.n),c=d.bad.length?"f":d.judged?"p":"u";
     return h("span",{class:"sc "+c+(it.n===sum.step?" t":""),
@@ -348,22 +356,23 @@ function overview(row,sum,items){
       onclick:()=>jumpStep(it.n)},it.cand?"末":it.n)}));
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
     h("span",{class:"n"},stepName(it)),
-    h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
+    h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
   return h("div",{class:"ov"},
     h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
       h("span",{class:"chip c-fail"},"机器判 Fail"),
+      h("span",{class:"mut"},"被检查项："),
       h("span",{class:"code"},`${sum.code||""} ${sum.item||""}`),
       h("span",{class:"chip c-tgt"},`目标 ${sum.step}/${sum.n} 步`)),
     h("div",{class:"kv"},
       h("span",{},"步骤 ",h("b",{},steps.length)),
       h("span",{},"有 Fail 的步 ",h("b",{style:bads.length?"color:var(--red)":""},bads.length)),
-      h("span",{},"本检查项 Fail 的步 ",h("b",{style:nk?"color:var(--red)":""},nk)),
+      fk?h("span",{},"本检查项 Fail 的步 ",h("b",{style:nk?"color:var(--red)":""},nk)):h("span",{},"Fail 类别 ",h("b",{},Object.keys(agg).length)," 类"),
       h("span",{},"未判定步 ",h("b",{},nu)),
       h("span",{},"判定分段 ",h("b",{},sum.split||"—")),
       h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—"))),
-    Object.keys(agg).length?h("div",{},h("div",{class:"lb"},"整条轨迹的 Fail 分布（蓝圈 = 本次质检的检查项；点下方条目可跳转）"),
+    Object.keys(agg).length?h("div",{},h("div",{class:"lb"},fk?"整条轨迹的 Fail 分布（蓝圈 = 本次质检的检查项；点下方条目可跳转）":"整条轨迹的 Fail 分布（左侧为「全部检查项」，此处一律平等展示；点下方条目可跳转）"),
       h("div",{class:"grid"},Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,c])=>
-        h("span",{class:"chip c-fail"+(k===sum.key?" c-key":"")},`${nm(k)} ×${c}`)))):null,
+        h("span",{class:"chip c-fail"+(k===fk?" c-key":"")},`${nm(k)} ×${c}`)))):null,
     h("div",{class:"lb"},`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`),
     strip,
     flist,
@@ -430,7 +439,7 @@ function judgeBlock(m,sum,tgt){
   const sm=m.step_metadata||{},jr=sm.judge_result||{},cl=jr.checklist,rules=Array.isArray(sm.checklist)?sm.checklist:[];
   const bad=cl?Object.keys(cl).filter(k=>cl[k]==="Fail"):[];
   const vals=cl?Object.values(cl):[];
-  const w=h("div",{});
+  const w=h("div",{}),fk=fkey(sum);
   w.append(h("div",{class:"concl"+(bad.length?" bad":cl?" good":"")},
     h("b",{},"机器判定结论："),
     h("span",{class:"chip "+(bad.length?"c-fail":cl?"c-pass":"c-na")},
@@ -439,14 +448,14 @@ function judgeBlock(m,sum,tgt){
       `Pass ${vals.filter(v=>v==="Pass").length} · NA ${vals.filter(v=>v==="NA").length} · 共 ${vals.length} 项`):null,
     h("span",{class:"chip"},"trainable="+(jr.trainable??sm.trainable??"—")),
     tgt?h("span",{class:"chip c-tgt"},"目标步骤"):null));
-  if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(bad.includes(sum.key)?"（蓝圈 = 本样本被检查项）":"")),
-    h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),title:k},nm(k)))));
+  if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(fk&&bad.includes(fk)?"（蓝圈 = 本样本被检查项）":"")),
+    h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),title:k},nm(k)))));
   if(tgt&&sum.seg)w.append(h("div",{class:"lb"},"机器对本检查项的结论"),h("div",{class:"seg"},sum.seg),
     sum.segzh?h("div",{class:"seg"},sum.segzh):null);
-  w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass；蓝圈 = 本样本被检查项）"));
+  w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass"+(fk?"；蓝圈 = 本样本被检查项":"")+"）"));
   if(cl){
     const g=h("div",{class:"grid"});
-    for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===sum.key?" c-key":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
+    for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===fk?" c-key":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
     w.append(g);
   }else w.append(h("div",{class:"mut"},"该步骤没有逐项判定"+(jr.skipped?"（已跳过："+JSON.stringify(jr.skipped)+"）":"")));
   const bits=["trainable="+(jr.trainable??sm.trainable),jr.source&&"source="+jr.source,jr.judge_version,jr.rejudge_rounds&&"rejudge="+JSON.stringify(jr.rejudge_rounds),jr.skipped&&cl&&"skipped="+JSON.stringify(jr.skipped)].filter(Boolean);
@@ -488,7 +497,7 @@ function stepCard(it,sum){
   const mk=h("span");
   const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
     h("b",{},it.cand?"最终回复":"Step "+it.n),tgt?h("span",{class:"chip c-fail"},"目标步骤"):null,
-    fails.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),title:k},nm(k))),
+    fails.map(k=>h("span",{class:"chip c-fail"+(k===fkey(sum)?" c-key":""),title:k},nm(k))),
     rules.length?h("span",{class:"chip c-unsure"},"规则 "+rules.length):null,
     nc?h("span",{class:"chip"},"调用 "+nc):null,mk,
     h("span",{class:"pv"},txt.slice(0,90).replace(/\s+/g," ")));
