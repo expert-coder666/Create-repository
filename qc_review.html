@@ -33,6 +33,7 @@ header .sp{flex:1}
 .c-na{background:#f1f2f4;color:#8a949e}
 .c-unsure{background:var(--ambbg);color:var(--amb);border-color:#f0d89a}
 .c-tgt{outline:2px solid var(--red);outline-offset:1px;font-weight:600}
+.c-key{outline:2px solid var(--blu);outline-offset:1px;font-weight:600}
 .code{font-weight:600;color:var(--blu)}
 .mut{color:var(--mut)}
 .msg,.step{background:var(--card);border:1px solid var(--bd);border-radius:8px;margin:0 0 10px}
@@ -70,7 +71,7 @@ kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding
 .sc:hover{box-shadow:0 0 0 2px var(--blubg)}
 .sc.f{background:var(--redbg);color:var(--red);border-color:#e8a9a0;font-weight:600}
 .sc.u{background:#f1f2f4;color:#8a949e;border-style:dashed}
-.sc.p{color:var(--grn);border-color:#cce8d8}
+.sc.p{background:var(--grnbg);color:var(--grn);border-color:#9fd4b4;font-weight:600}
 .sc.t{outline:2px solid var(--red);outline-offset:1px}
 .flist{margin:4px 0 0;display:grid;gap:3px;max-height:176px;overflow:auto}
 .frow{display:flex;gap:6px;align-items:center;padding:3px 6px;border:1px solid #f0d4cf;background:#fdf6f5;border-radius:6px;cursor:pointer;font-size:12.5px}
@@ -347,7 +348,7 @@ function overview(row,sum,items){
       onclick:()=>jumpStep(it.n)},it.cand?"末":it.n)}));
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
     h("span",{class:"n"},stepName(it)),
-    h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),style:"margin-right:4px"},nm(k))))))):null;
+    h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
   return h("div",{class:"ov"},
     h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
       h("span",{class:"chip c-fail"},"机器判 Fail"),
@@ -360,10 +361,10 @@ function overview(row,sum,items){
       h("span",{},"未判定步 ",h("b",{},nu)),
       h("span",{},"判定分段 ",h("b",{},sum.split||"—")),
       h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—"))),
-    Object.keys(agg).length?h("div",{},h("div",{class:"lb"},"整条轨迹的 Fail 分布（点下方条目可跳转）"),
+    Object.keys(agg).length?h("div",{},h("div",{class:"lb"},"整条轨迹的 Fail 分布（蓝圈 = 本次质检的检查项；点下方条目可跳转）"),
       h("div",{class:"grid"},Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,c])=>
-        h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":"")},`${nm(k)} ×${c}`)))):null,
-    h("div",{class:"lb"},"步骤条（红=有Fail 绿=全通过 灰虚线=未判定 红框=目标步骤，点击跳转）"),
+        h("span",{class:"chip c-fail"+(k===sum.key?" c-key":"")},`${nm(k)} ×${c}`)))):null,
+    h("div",{class:"lb"},`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`),
     strip,
     flist,
     sum.seg?h("details",{open:true},h("summary",{class:"mut"},"机器对本检查项的结论"),
@@ -438,14 +439,14 @@ function judgeBlock(m,sum,tgt){
       `Pass ${vals.filter(v=>v==="Pass").length} · NA ${vals.filter(v=>v==="NA").length} · 共 ${vals.length} 项`):null,
     h("span",{class:"chip"},"trainable="+(jr.trainable??sm.trainable??"—")),
     tgt?h("span",{class:"chip c-tgt"},"目标步骤"):null));
-  if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(bad.includes(sum.key)?"（红框=本样本被检查项）":"")),
-    h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),title:k},nm(k)))));
+  if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(bad.includes(sum.key)?"（蓝圈 = 本样本被检查项）":"")),
+    h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),title:k},nm(k)))));
   if(tgt&&sum.seg)w.append(h("div",{class:"lb"},"机器对本检查项的结论"),h("div",{class:"seg"},sum.seg),
     sum.segzh?h("div",{class:"seg"},sum.segzh):null);
-  w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass；红框=本样本被检查项）"));
+  w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass；蓝圈 = 本样本被检查项）"));
   if(cl){
     const g=h("div",{class:"grid"});
-    for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===sum.key?" c-tgt":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
+    for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===sum.key?" c-key":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
     w.append(g);
   }else w.append(h("div",{class:"mut"},"该步骤没有逐项判定"+(jr.skipped?"（已跳过："+JSON.stringify(jr.skipped)+"）":"")));
   const bits=["trainable="+(jr.trainable??sm.trainable),jr.source&&"source="+jr.source,jr.judge_version,jr.rejudge_rounds&&"rejudge="+JSON.stringify(jr.rejudge_rounds),jr.skipped&&cl&&"skipped="+JSON.stringify(jr.skipped)].filter(Boolean);
@@ -487,7 +488,7 @@ function stepCard(it,sum){
   const mk=h("span");
   const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
     h("b",{},it.cand?"最终回复":"Step "+it.n),tgt?h("span",{class:"chip c-fail"},"目标步骤"):null,
-    fails.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),title:k},nm(k))),
+    fails.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-key":""),title:k},nm(k))),
     rules.length?h("span",{class:"chip c-unsure"},"规则 "+rules.length):null,
     nc?h("span",{class:"chip"},"调用 "+nc):null,mk,
     h("span",{class:"pv"},txt.slice(0,90).replace(/\s+/g," ")));
