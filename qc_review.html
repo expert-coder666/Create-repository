@@ -351,7 +351,7 @@ function overview(row,sum,items){
   const fk=fkey(sum);
   const strip=h("div",{class:"sstrip"},steps.map(it=>{
     const d=inf.get(it.n),c=d.bad.length?"f":d.judged?"p":"u";
-    return h("span",{class:"sc "+c+(it.n===sum.step?" t":""),
+    return h("span",{class:"sc "+c+(fk&&it.n===sum.step?" t":""),
       title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+"（点击跳转）",
       onclick:()=>jumpStep(it.n)},it.cand?"末":it.n)}));
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
@@ -360,23 +360,23 @@ function overview(row,sum,items){
   return h("div",{class:"ov"},
     h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
       h("span",{class:"chip c-fail"},"机器判 Fail"),
-      h("span",{class:"mut"},"被检查项："),
-      h("span",{class:"code"},`${sum.code||""} ${sum.item||""}`),
-      h("span",{class:"chip c-tgt"},`目标 ${sum.step}/${sum.n} 步`)),
+      fk?h("span",{class:"mut"},"被检查项："):null,
+      fk?h("span",{class:"code"},`${sum.code||""} ${sum.item||""}`):null,
+      fk?h("span",{class:"chip c-tgt"},`目标 ${sum.step}/${sum.n} 步`):null),
     h("div",{class:"kv"},
       h("span",{},"步骤 ",h("b",{},steps.length)),
       h("span",{},"有 Fail 的步 ",h("b",{style:bads.length?"color:var(--red)":""},bads.length)),
       fk?h("span",{},"本检查项 Fail 的步 ",h("b",{style:nk?"color:var(--red)":""},nk)):h("span",{},"Fail 类别 ",h("b",{},Object.keys(agg).length)," 类"),
       h("span",{},"未判定步 ",h("b",{},nu)),
       h("span",{},"判定分段 ",h("b",{},sum.split||"—")),
-      h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—"))),
+      fk?h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—")):null),
     Object.keys(agg).length?h("div",{},h("div",{class:"lb"},fk?"整条轨迹的 Fail 分布（蓝圈 = 本次质检的检查项；点下方条目可跳转）":"整条轨迹的 Fail 分布（左侧为「全部检查项」，此处一律平等展示；点下方条目可跳转）"),
       h("div",{class:"grid"},Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,c])=>
         h("span",{class:"chip c-fail"+(k===fk?" c-key":"")},`${nm(k)} ×${c}`)))):null,
-    h("div",{class:"lb"},`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`),
+    h("div",{class:"lb"},fk?`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`:"步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定；点击跳转）"),
     strip,
     flist,
-    sum.seg?h("details",{open:true},h("summary",{class:"mut"},"机器对本检查项的结论"),
+    sum.seg?h("details",{open:!!fk},h("summary",{class:"mut"},fk?"机器对本检查项的结论":`机器对被检查项 ${sum.code||"—"} 的结论`),
       h("div",{class:"seg"},sum.seg),
       sum.segzh?h("div",{class:"seg"},sum.segzh):null):null);
 }
