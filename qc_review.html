@@ -61,6 +61,25 @@ pre.th{background:#fbf9f1}
 dl{margin:6px 0;display:grid;grid-template-columns:78px 1fr;gap:2px 8px;font-size:12.5px}
 dt{color:var(--mut)}dd{margin:0;word-break:break-all}
 kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding:0 4px;font-size:11px;background:#fff}
+.ov{background:var(--card);border:1px solid var(--bd);border-left:4px solid var(--blu);border-radius:8px;padding:10px 12px;margin:0 0 10px}
+.ov h4{margin:0 0 6px;font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ov .kv{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin:2px 0 6px}
+.ov .kv b{color:var(--tx)}
+.sstrip{display:flex;flex-wrap:wrap;gap:3px;margin:4px 0}
+.sc{min-width:26px;text-align:center;padding:1px 5px;border:1px solid var(--bd);border-radius:5px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;cursor:pointer;background:#fff;color:var(--mut)}
+.sc:hover{box-shadow:0 0 0 2px var(--blubg)}
+.sc.f{background:var(--redbg);color:var(--red);border-color:#e8a9a0;font-weight:600}
+.sc.u{background:#f1f2f4;color:#8a949e;border-style:dashed}
+.sc.p{color:var(--grn);border-color:#cce8d8}
+.sc.t{outline:2px solid var(--red);outline-offset:1px}
+.flist{margin:4px 0 0;display:grid;gap:3px;max-height:176px;overflow:auto}
+.frow{display:flex;gap:6px;align-items:center;padding:3px 6px;border:1px solid #f0d4cf;background:#fdf6f5;border-radius:6px;cursor:pointer;font-size:12.5px}
+.frow:hover{background:var(--redbg)}
+.frow .n{font-weight:600;color:var(--red);min-width:62px;white-space:nowrap}
+.step.hasfail{border-color:#e8a9a0}
+.concl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:5px 8px;border-radius:6px;margin:6px 0 2px;background:#f7f8fa}
+.concl.bad{background:var(--redbg)}
+.concl.good{background:var(--grnbg)}
 </style></head>
 <body>
 <header>
@@ -111,8 +130,18 @@ function summarize(r,k){
   const q=(r.trajectory_metadata||{}).qc_sample||{};
   const id=q.data_id||r.data_id||r.task_id;
   if(q.check_key)S.names[q.check_key]={code:q.check_code,item:q.check_item};
+  let nf=0,nu=0,nk=0;const agg={};
+  const cand=r.candidates&&r.candidates[0]&&r.candidates[0][0];
+  const sms=(r.prompt||[]).filter(m=>m.role==="assistant").concat(cand?[cand]:[]);
+  for(const m of sms){
+    const cl=((m.step_metadata||{}).judge_result||{}).checklist;
+    if(!cl||!Object.keys(cl).length){nu++;continue}
+    const bad=Object.keys(cl).filter(x=>cl[x]==="Fail");
+    if(bad.length){nf++;bad.forEach(x=>agg[x]=(agg[x]||0)+1);if(q.check_key&&cl[q.check_key]==="Fail")nk++}
+  }
   return {k,id,task:r.task_id,sid:q.sample_id,key:q.check_key,code:q.check_code,item:q.check_item,
     step:q.step,n:q.n_steps,loc:q.step_loc,split:q.judge_split,fails:q.step_fail_items||[],
+    seg:q.judge_reason_seg,segzh:q.judge_reason_zh,nf,nu,nk,agg,
     src:q.source,ds:q.dataset,hl:q.human_label,hn:q.human_note||"",hs:q.human_step_marks||null};
 }
 async function loadFile(file){
@@ -243,7 +272,11 @@ function paintItem(el,s){
   el.replaceChildren(
     h("div",{class:"r1"},h("span",{class:"mut"},"#"+(s.k+1)),h("span",{class:"code"},s.code),h("span",{},s.item),h("span",{class:"sp",style:"flex:1"}),
       a&&a.label?h("span",{class:"chip c-"+(a.label==="pass"?"pass":a.label==="fail"?"fail":"unsure")},LBLS[a.label]||a.label):(marked(a)?h("span",{class:"chip"},"有备注"):null)),
-    h("div",{class:"r2"},`step ${s.step}/${s.n} · ${s.split} · ${(s.task||"").slice(0,26)}`));
+    h("div",{class:"r2"},
+      `step ${s.step}/${s.n} · ${s.split} · `,
+      h("span",{style:s.nf?"color:var(--red);font-weight:600":""},`Fail步 ${s.nf||0}`),
+      s.nk>1?h("span",{style:"color:var(--red)"},`（本项 ${s.nk}）`):null,
+      ` · ${(s.task||"").slice(0,18)}`));
 }
 async function select(k){
   const prev=document.getElementById("it"+S.cur);
@@ -287,15 +320,67 @@ function buildItems(row){
   if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true})}
   return items;
 }
+function stepInfo(it){
+  const cl=((it.m.step_metadata||{}).judge_result||{}).checklist;
+  const judged=!!(cl&&Object.keys(cl).length);
+  return {cl:cl||{},judged,bad:judged?Object.keys(cl).filter(k=>cl[k]==="Fail"):[]};
+}
+const stepName=it=>it.cand?"最终回复":"Step "+it.n;
+function jumpStep(n){
+  const el=(S.stepEls||{})[n];
+  if(!el)return;
+  el._set(true);
+  el.scrollIntoView({block:"start"});
+  if(el.animate)el.animate([{backgroundColor:"#fff4d9"},{backgroundColor:"#fff"}],{duration:900});
+}
+function overview(row,sum,items){
+  const steps=items.filter(it=>it.type==="step");
+  const inf=new Map(steps.map(it=>[it.n,stepInfo(it)]));
+  const bads=steps.filter(it=>inf.get(it.n).bad.length);
+  const nu=steps.filter(it=>!inf.get(it.n).judged).length;
+  const nk=steps.filter(it=>inf.get(it.n).bad.includes(sum.key)).length;
+  const agg={};bads.forEach(it=>inf.get(it.n).bad.forEach(k=>agg[k]=(agg[k]||0)+1));
+  const strip=h("div",{class:"sstrip"},steps.map(it=>{
+    const d=inf.get(it.n),c=d.bad.length?"f":d.judged?"p":"u";
+    return h("span",{class:"sc "+c+(it.n===sum.step?" t":""),
+      title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+"（点击跳转）",
+      onclick:()=>jumpStep(it.n)},it.cand?"末":it.n)}));
+  const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
+    h("span",{class:"n"},stepName(it)),
+    h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),style:"margin-right:4px"},nm(k))))))):null;
+  return h("div",{class:"ov"},
+    h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
+      h("span",{class:"chip c-fail"},"机器判 Fail"),
+      h("span",{class:"code"},`${sum.code||""} ${sum.item||""}`),
+      h("span",{class:"chip c-tgt"},`目标 ${sum.step}/${sum.n} 步`)),
+    h("div",{class:"kv"},
+      h("span",{},"步骤 ",h("b",{},steps.length)),
+      h("span",{},"有 Fail 的步 ",h("b",{style:bads.length?"color:var(--red)":""},bads.length)),
+      h("span",{},"本检查项 Fail 的步 ",h("b",{style:nk?"color:var(--red)":""},nk)),
+      h("span",{},"未判定步 ",h("b",{},nu)),
+      h("span",{},"判定分段 ",h("b",{},sum.split||"—")),
+      h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—"))),
+    Object.keys(agg).length?h("div",{},h("div",{class:"lb"},"整条轨迹的 Fail 分布（点下方条目可跳转）"),
+      h("div",{class:"grid"},Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,c])=>
+        h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":"")},`${nm(k)} ×${c}`)))):null,
+    h("div",{class:"lb"},"步骤条（红=有Fail 绿=全通过 灰虚线=未判定 红框=目标步骤，点击跳转）"),
+    strip,
+    flist,
+    sum.seg?h("details",{open:true},h("summary",{class:"mut"},"机器对本检查项的结论"),
+      h("div",{class:"seg"},sum.seg),
+      sum.segzh?h("div",{class:"seg"},sum.segzh):null):null);
+}
 function renderMain(row,sum){
   const M=$("#main");M.replaceChildren();
+  S.stepEls={};
   const tm=row.trajectory_metadata||{};
   const tools=(row.tools||[]).map(t=>(t.function||t).name);
   const meta=Object.fromEntries(Object.entries(tm).filter(([k])=>!["qc_sample","servers","monitor","traps"].includes(k)));
+  const items=buildItems(row);
+  M.append(overview(row,sum,items));
   M.append(h("details",{class:"msg"},h("summary",{class:"hd"},"任务元信息 · 可用工具 "+tools.length+" 个"),
     h("div",{class:"bd"},longPre(JSON.stringify(meta,null,1),"",1500),
       h("div",{class:"lb"},"工具列表"),h("div",{class:"mut"},tools.join("、")||"—"))));
-  const items=buildItems(row);
   const bar=h("div",{class:"btns",style:"margin:0 0 8px"},
     h("button",{onclick:()=>toggleAll(true)},"展开全部步骤"),h("button",{onclick:()=>toggleAll(false)},"折叠（仅保留目标步骤）"),
     h("button",{onclick:()=>jumpTgt()},"跳到目标步骤"),
@@ -305,7 +390,7 @@ function renderMain(row,sum){
   for(const it of items){
     const el=it.type==="msg"?msgCard(it):stepCard(it,sum);
     M.append(el);
-    if(it.type==="step"&&it.n===sum.step){tgtEl=el}
+    if(it.type==="step"){S.stepEls[it.n]=el;if(it.n===sum.step)tgtEl=el}
   }
   if(row.system_setting)M.insertBefore(msgCard({m:{role:"system",content:row.system_setting},i:"system_setting"}),bar);
   M.scrollTop=0;
@@ -340,9 +425,24 @@ function segs(text,label){
   });
   return w;
 }
-function judgeBlock(m,sum,openReason){
+function judgeBlock(m,sum,tgt){
   const sm=m.step_metadata||{},jr=sm.judge_result||{},cl=jr.checklist,rules=Array.isArray(sm.checklist)?sm.checklist:[];
-  const w=h("div",{},h("div",{class:"lb"},"机器判定（红=Fail 灰=NA 绿=Pass；红框=本样本被检查项）"));
+  const bad=cl?Object.keys(cl).filter(k=>cl[k]==="Fail"):[];
+  const vals=cl?Object.values(cl):[];
+  const w=h("div",{});
+  w.append(h("div",{class:"concl"+(bad.length?" bad":cl?" good":"")},
+    h("b",{},"机器判定结论："),
+    h("span",{class:"chip "+(bad.length?"c-fail":cl?"c-pass":"c-na")},
+      bad.length?`Fail · ${bad.length} 项不通过`:cl?"全部通过":"未判定"),
+    cl?h("span",{class:"mut",style:"font-size:12px"},
+      `Pass ${vals.filter(v=>v==="Pass").length} · NA ${vals.filter(v=>v==="NA").length} · 共 ${vals.length} 项`):null,
+    h("span",{class:"chip"},"trainable="+(jr.trainable??sm.trainable??"—")),
+    tgt?h("span",{class:"chip c-tgt"},"目标步骤"):null));
+  if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(bad.includes(sum.key)?"（红框=本样本被检查项）":"")),
+    h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),title:k},nm(k)))));
+  if(tgt&&sum.seg)w.append(h("div",{class:"lb"},"机器对本检查项的结论"),h("div",{class:"seg"},sum.seg),
+    sum.segzh?h("div",{class:"seg"},sum.segzh):null);
+  w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass；红框=本样本被检查项）"));
   if(cl){
     const g=h("div",{class:"grid"});
     for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===sum.key?" c-tgt":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
@@ -351,7 +451,7 @@ function judgeBlock(m,sum,openReason){
   const bits=["trainable="+(jr.trainable??sm.trainable),jr.source&&"source="+jr.source,jr.judge_version,jr.rejudge_rounds&&"rejudge="+JSON.stringify(jr.rejudge_rounds),jr.skipped&&cl&&"skipped="+JSON.stringify(jr.skipped)].filter(Boolean);
   w.append(h("div",{class:"mut",style:"font-size:12px"},bits.join(" · ")));
   const rs=[segs(jr.reason,"判定理由（英文原文）"),segs(jr.reason_zh,"判定理由（中文）")].filter(Boolean);
-  if(rs.length)w.append(h("details",{open:openReason},h("summary",{class:"mut"},"展开判定理由"),rs));
+  if(rs.length)w.append(h("details",{open:tgt||bad.length>0},h("summary",{class:"mut"},"判定理由（按 S1~S5 分段）"),rs));
   if(rules.length)w.append(h("div",{class:"lb"},"规则检查"),...rules.map(r=>h("div",{class:"seg"},h("b",{},(r[0]||"")+" "),r.slice(1).join(" "))));
   return w;
 }
