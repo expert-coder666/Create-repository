@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>质检结果浏览与标注</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--bd:#dde1e6;--tx:#1f2933;--mut:#6b7785;--red:#c0392b;--redbg:#fdecea;--grn:#1e8449;--grnbg:#e6f5ec;--amb:#a96a00;--ambbg:#fff4d9;--blu:#2457c5;--blubg:#e8effc}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:14px/1.55 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--tx);background:var(--bg);display:flex;flex-direction:column}
+button,select,input,textarea{font:inherit;color:inherit}
+button{border:1px solid var(--bd);background:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}
+button:hover{background:#eef1f5}
+button.on{background:var(--blu);color:#fff;border-color:var(--blu)}
+button.pri{background:var(--blu);color:#fff;border-color:var(--blu)}
+input,select,textarea{border:1px solid var(--bd);border-radius:6px;padding:3px 8px;background:#fff}
+textarea{width:100%;resize:vertical}
+header{display:flex;gap:8px;align-items:center;padding:6px 12px;background:#fff;border-bottom:1px solid var(--bd);flex-wrap:wrap}
+header .sp{flex:1}
+#stat{color:var(--mut);font-size:13px}
+#app{flex:1;min-height:0;display:grid;grid-template-columns:270px minmax(0,1fr) 370px}
+#app>div{overflow:auto;min-height:0}
+#list{background:#fff;border-right:1px solid var(--bd)}
+#list .flt{position:sticky;top:0;background:#fff;padding:8px;border-bottom:1px solid var(--bd);display:grid;gap:5px;z-index:2}
+.it{padding:6px 10px;border-bottom:1px solid #eef0f3;cursor:pointer;font-size:13px}
+.it:hover{background:#f6f8fb}
+.it.act{background:var(--blubg);box-shadow:inset 3px 0 var(--blu)}
+.it .r1{display:flex;gap:6px;align-items:center}
+.it .r2{color:var(--mut);font-size:12px}
+#main{padding:12px 16px}
+#side{background:#fff;border-left:1px solid var(--bd);padding:12px 14px}
+#side h3{margin:0 0 6px;font-size:14px}
+.chip{display:inline-block;padding:0 7px;border-radius:10px;font-size:12px;line-height:19px;border:1px solid var(--bd);background:#fff;white-space:nowrap}
+.c-fail{background:var(--redbg);color:var(--red);border-color:#f3c0ba}
+.c-pass{background:var(--grnbg);color:var(--grn);border-color:#b8e0c8}
+.c-na{background:#f1f2f4;color:#8a949e}
+.c-unsure{background:var(--ambbg);color:var(--amb);border-color:#f0d89a}
+.c-tgt{outline:2px solid var(--red);outline-offset:1px;font-weight:600}
+.code{font-weight:600;color:var(--blu)}
+.mut{color:var(--mut)}
+.msg,.step{background:var(--card);border:1px solid var(--bd);border-radius:8px;margin:0 0 10px}
+.msg>.hd,.step>.hd{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 10px;cursor:pointer}
+.step.tgt{border:2px solid var(--red)}
+.step.after{opacity:.82}
+.step.hasfail>.hd{background:#fff8f7}
+.bd{padding:2px 12px 10px;border-top:1px solid #eef0f3}
+.pv{color:var(--mut);font-size:12.5px;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+pre{margin:4px 0;padding:8px;background:#f7f8fa;border:1px solid #eceef1;border-radius:6px;white-space:pre-wrap;word-break:break-word;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;max-height:520px;overflow:auto}
+pre.th{background:#fbf9f1}
+.lb{font-size:12px;color:var(--mut);margin-top:8px}
+.call{border-left:3px solid var(--blu);padding-left:8px;margin:6px 0}
+.res{border-left:3px solid #9aa5b1;padding-left:8px;margin:4px 0 8px}
+.grid{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.seg{margin:4px 0;padding:6px 8px;background:#f7f8fa;border-radius:6px;font-size:13px;white-space:pre-wrap}
+.seg b{color:var(--blu)}
+.hum{margin-top:8px;padding:6px 8px;background:var(--ambbg);border-radius:6px}
+.hum input[type=text]{width:100%;margin-top:4px}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.btns button{flex:1;padding:6px 4px}
+.btns button.sel-fail{background:var(--red);color:#fff;border-color:var(--red)}
+.btns button.sel-pass{background:var(--grn);color:#fff;border-color:var(--grn)}
+.btns button.sel-unsure{background:#d9a21b;color:#fff;border-color:#d9a21b}
+#drop{margin:60px auto;max-width:520px;padding:40px;text-align:center;border:2px dashed #aab4c0;border-radius:12px;color:var(--mut);background:#fff}
+dl{margin:6px 0;display:grid;grid-template-columns:78px 1fr;gap:2px 8px;font-size:12.5px}
+dt{color:var(--mut)}dd{margin:0;word-break:break-all}
+kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding:0 4px;font-size:11px;background:#fff}
+</style></head>
+<body>
+<header>
+  <b>质检结果浏览与标注</b>
+  <button id="bOpen" class="pri">打开 jsonl</button>
+  <input id="fOpen" type="file" accept=".jsonl,.json,.ndjson" hidden>
+  <span id="fname" class="mut"></span>
+  <span id="stat"></span>
+  <span class="sp"></span>
+  <button id="bExpAll" title="导出带 human_label / human_note 的完整 jsonl（未标注的行原样保留）">导出完整 jsonl</button>
+  <button id="bExpJson">导出标注 JSON</button>
+  <button id="bExpCsv">导出 CSV</button>
+  <button id="bImp">导入标注</button>
+  <input id="fImp" type="file" accept=".json" hidden>
+</header>
+<div id="app">
+  <div id="list"></div>
+  <div id="main"><div id="drop">把 qc_fail_samples.n10.jsonl 拖到这里，或点击上方“打开 jsonl”<br><span class="mut">文件只在本机浏览器内读取，不上传；标注自动保存在浏览器本地，并可随时导出。</span></div></div>
+  <div id="side"></div>
+</div>
+<script>
+"use strict";
+const S={file:null,offs:[],sum:[],cur:-1,cache:new Map(),ann:{},names:{},order:[],view:[],flt:{code:"",st:"",split:"",q:""}};
+const LS="qcrev.v1";
+const $=s=>document.querySelector(s);
+function h(tag,props,...kids){
+  const e=document.createElement(tag);
+  for(const k in props||{}){const v=props[k];
+    if(k==="class")e.className=v;
+    else if(k==="text")e.textContent=v;
+    else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);
+    else if(v!==false&&v!=null)e.setAttribute(k,v===true?"":v);}
+  for(const c of kids.flat(Infinity))if(c!=null&&c!==false)e.append(c.nodeType?c:document.createTextNode(String(c)));
+  return e;
+}
+const status=t=>{$("#stat").textContent=t};
+const LBL={fail:"确认Fail（机器判对）",pass:"机器误判（实际Pass）",unsure:"存疑待复核"};
+const LBLS={fail:"确认Fail",pass:"误判",unsure:"存疑"};
+
+async function getRow(k,nocache){
+  if(!nocache&&S.cache.has(k)){const v=S.cache.get(k);S.cache.delete(k);S.cache.set(k,v);return v}
+  const [a,b]=S.offs[k];
+  const r=JSON.parse(await S.file.slice(a,b).text());
+  if(!nocache){S.cache.set(k,r);if(S.cache.size>4)S.cache.delete(S.cache.keys().next().value)}
+  return r;
+}
+function summarize(r,k){
+  const q=(r.trajectory_metadata||{}).qc_sample||{};
+  const id=q.data_id||r.data_id||r.task_id;
+  if(q.check_key)S.names[q.check_key]={code:q.check_code,item:q.check_item};
+  return {k,id,task:r.task_id,sid:q.sample_id,key:q.check_key,code:q.check_code,item:q.check_item,
+    step:q.step,n:q.n_steps,loc:q.step_loc,split:q.judge_split,fails:q.step_fail_items||[],
+    src:q.source,ds:q.dataset,hl:q.human_label,hn:q.human_note||"",hs:q.human_step_marks||null};
+}
+async function loadFile(file){
+  S.file=file;S.offs=[];S.sum=[];S.cache.clear();S.cur=-1;
+  $("#fname").textContent=file.name;
+  const size=file.size,CH=16<<20;let start=0;
+  for(let pos=0;pos<size;pos+=CH){
+    status(`建立索引 ${Math.round(pos/size*100)}%`);
+    const buf=new Uint8Array(await file.slice(pos,Math.min(size,pos+CH)).arrayBuffer());
+    let i,from=0;
+    while((i=buf.indexOf(10,from))>=0){if(pos+i>start)S.offs.push([start,pos+i]);start=pos+i+1;from=i+1}
+  }
+  if(start<size)S.offs.push([start,size]);
+  for(let k=0;k<S.offs.length;k++){
+    status(`解析摘要 ${k+1}/${S.offs.length}`);
+    S.sum.push(summarize(await getRow(k,true),k));
+    if(k%8===0)await new Promise(r=>setTimeout(r));
+  }
+  try{S.ann=JSON.parse(localStorage.getItem(LS)||"{}")}catch(e){S.ann={}}
+  for(const s of S.sum){
+    if(!S.ann[s.id]&&(s.hl||s.hn||s.hs))S.ann[s.id]={label:s.hl||null,note:s.hn,steps:s.hs||{},ts:null};
+  }
+  initFilters();applyFilter();
+  const last=+localStorage.getItem(LS+".cur."+file.name);
+  select(S.view.length?(S.view.find(s=>s.k===last)||S.view[0]).k:-1);
+}
+
+let saveT=0;
+function ann(id){return S.ann[id]||(S.ann[id]={label:null,note:"",steps:{},ts:null})}
+function marked(a){
+  if(!a)return false;
+  return !!(a.label||(a.note&&a.note.trim())||Object.values(a.steps||{}).some(x=>x.mark||(x.note&&x.note.trim())));
+}
+function touch(a){a.ts=new Date().toISOString();clearTimeout(saveT);saveT=setTimeout(persist,300);refreshStat()}
+function persist(){try{localStorage.setItem(LS,JSON.stringify(S.ann))}catch(e){status("本地存储失败："+e.message+"，请先导出")}}
+function refreshStat(){
+  const n=S.sum.length,m=S.sum.filter(s=>marked(S.ann[s.id])).length;
+  const c=l=>S.sum.filter(s=>(S.ann[s.id]||{}).label===l).length;
+  status(`已标注 ${m}/${n} · 确认Fail ${c("fail")} · 误判 ${c("pass")} · 存疑 ${c("unsure")}`);
+  S.sum.forEach(s=>{const el=document.getElementById("it"+s.k);if(el)paintItem(el,s)});
+}
+function download(blob,name){
+  const a=h("a",{href:URL.createObjectURL(blob),download:name});
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+const base=()=>(S.file?S.file.name:"qc").replace(/\.jsonl?$/,"");
+function annRows(){
+  return S.sum.filter(s=>marked(S.ann[s.id])).map(s=>{const a=S.ann[s.id];
+    return {data_id:s.id,task_id:s.task,sample_id:s.sid,check_code:s.code,check_item:s.item,step:s.step,n_steps:s.n,
+      human_label:a.label||null,human_note:a.note||"",human_step_marks:a.steps||{},updated_at:a.ts}});
+}
+function expJson(){download(new Blob([JSON.stringify(annRows(),null,1)],{type:"application/json"}),base()+".annotations.json")}
+function expCsv(){
+  const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const cols=["data_id","task_id","sample_id","check_code","check_item","step","n_steps","human_label","human_note","step_marks","updated_at"];
+  const L=[cols.join(",")].concat(annRows().map(r=>cols.map(c=>esc(c==="step_marks"?
+    Object.entries(r.human_step_marks).filter(([,x])=>x.mark||x.note).map(([n,x])=>`step${n}:${x.mark||""} ${x.note||""}`).join(" ; "):r[c])).join(",")));
+  download(new Blob(["﻿"+L.join("\r\n")],{type:"text/csv;charset=utf-8"}),base()+".annotations.csv");
+}
+async function expAll(){
+  if(!S.file)return;
+  const parts=[];
+  for(let k=0;k<S.offs.length;k++){
+    status(`生成 ${k+1}/${S.offs.length}`);
+    const s=S.sum[k],a=S.ann[s.id];
+    if(!marked(a)){parts.push(S.file.slice(S.offs[k][0],S.offs[k][1]),"\n");continue}
+    const r=await getRow(k,true),q=r.trajectory_metadata.qc_sample;
+    q.human_label=a.label||null;q.human_note=a.note||"";
+    const st=Object.fromEntries(Object.entries(a.steps||{}).filter(([,x])=>x.mark||(x.note&&x.note.trim())));
+    if(Object.keys(st).length)q.human_step_marks=st;else delete q.human_step_marks;
+    q.human_updated_at=a.ts;
+    parts.push(JSON.stringify(r),"\n");
+    if(k%8===0)await new Promise(r=>setTimeout(r));
+  }
+  download(new Blob(parts,{type:"application/x-ndjson"}),base()+".reviewed.jsonl");
+  refreshStat();
+}
+async function impAnn(file){
+  const arr=JSON.parse(await file.text());let n=0;
+  for(const r of arr){
+    if(!r.data_id)continue;
+    S.ann[r.data_id]={label:r.human_label||null,note:r.human_note||"",steps:r.human_step_marks||{},ts:r.updated_at||null};n++;
+  }
+  persist();applyFilter();refreshStat();if(S.cur>=0)select(S.cur);
+  status(`已导入 ${n} 条标注`);setTimeout(refreshStat,2500);
+}
+
+function initFilters(){
+  const codes=[...new Map(S.sum.map(s=>[s.code,s.item])).entries()].sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"en",{numeric:true}));
+  const splits=[...new Set(S.sum.map(s=>s.split))].sort();
+  const L=$("#list");L.replaceChildren();
+  const sel=(id,opts,ph)=>h("select",{id,onchange:onFlt},h("option",{value:""},ph),opts.map(([v,t])=>h("option",{value:v},t)));
+  L.append(h("div",{class:"flt"},
+    sel("fCode",codes.map(([c,i])=>[c,`${c} ${i}`]),"全部检查项"),
+    sel("fSt",[["todo","未标注"],["done","已标注"],["fail","确认Fail"],["pass","机器误判"],["unsure","存疑"]],"全部状态"),
+    sel("fSplit",splits.map(x=>[x,x]),"全部判定分段"),
+    h("input",{id:"fQ",type:"search",placeholder:"搜索 task_id / data_id / 理由…",oninput:onFlt}),
+    h("div",{id:"fCnt",class:"mut"})),
+    h("div",{id:"items"}));
+}
+function onFlt(){
+  S.flt={code:$("#fCode").value,st:$("#fSt").value,split:$("#fSplit").value,q:$("#fQ").value.trim().toLowerCase()};
+  applyFilter();
+}
+function applyFilter(){
+  const f=S.flt;
+  S.view=S.sum.filter(s=>{
+    const a=S.ann[s.id];
+    if(f.code&&s.code!==f.code)return false;
+    if(f.split&&s.split!==f.split)return false;
+    if(f.st==="todo"&&marked(a))return false;
+    if(f.st==="done"&&!marked(a))return false;
+    if(["fail","pass","unsure"].includes(f.st)&&(!a||a.label!==f.st))return false;
+    if(f.q&&!(`${s.id} ${s.task} ${s.sid} ${s.item} ${s.code}`.toLowerCase().includes(f.q)))return false;
+    return true;
+  });
+  const box=$("#items");box.replaceChildren();
+  for(const s of S.view){
+    const el=h("div",{class:"it",id:"it"+s.k,onclick:()=>select(s.k)});
+    paintItem(el,s);box.append(el);
+  }
+  $("#fCnt").textContent=`显示 ${S.view.length}/${S.sum.length}`;
+  refreshStat();
+}
+function paintItem(el,s){
+  const a=S.ann[s.id];
+  el.className="it"+(s.k===S.cur?" act":"");
+  el.replaceChildren(
+    h("div",{class:"r1"},h("span",{class:"mut"},"#"+(s.k+1)),h("span",{class:"code"},s.code),h("span",{},s.item),h("span",{class:"sp",style:"flex:1"}),
+      a&&a.label?h("span",{class:"chip c-"+(a.label==="pass"?"pass":a.label==="fail"?"fail":"unsure")},LBLS[a.label]||a.label):(marked(a)?h("span",{class:"chip"},"有备注"):null)),
+    h("div",{class:"r2"},`step ${s.step}/${s.n} · ${s.split} · ${(s.task||"").slice(0,26)}`));
+}
+async function select(k){
+  const prev=document.getElementById("it"+S.cur);
+  S.cur=k;
+  if(prev)paintItem(prev,S.sum[+prev.id.slice(2)]);
+  if(k<0){$("#main").replaceChildren(h("div",{id:"drop"},"没有符合筛选条件的样本"));$("#side").replaceChildren();return}
+  const el=document.getElementById("it"+k);
+  if(el){paintItem(el,S.sum[k]);el.scrollIntoView({block:"nearest"})}
+  localStorage.setItem(LS+".cur."+S.file.name,k);
+  const row=await getRow(k);
+  if(S.cur!==k)return;
+  renderMain(row,S.sum[k]);renderSide(row,S.sum[k]);
+}
+function move(d){
+  const i=S.view.findIndex(s=>s.k===S.cur),j=Math.max(0,Math.min(S.view.length-1,i+d));
+  if(S.view[j])select(S.view[j].k);
+}
+function nextTodo(){
+  const i=S.view.findIndex(s=>s.k===S.cur);
+  const n=S.view.slice(i+1).concat(S.view.slice(0,i)).find(s=>!marked(S.ann[s.id]));
+  if(n)select(n.k);else status("当前筛选下已全部标注");
+}
+
+const textOf=c=>typeof c==="string"?c:Array.isArray(c)?c.map(b=>b&&b.text!=null?b.text:b&&b.type?`[${b.type}]`:JSON.stringify(b)).join("\n"):c==null?"":JSON.stringify(c);
+const nm=k=>S.names[k]?`${S.names[k].code} ${S.names[k].item}`:k;
+function longPre(text,cls,lim=3000){
+  const p=h("pre",{class:cls||""});
+  if(text.length<=lim){p.textContent=text;return p}
+  const w=h("div");p.textContent=text.slice(0,lim)+" …";
+  w.append(p,h("button",{onclick:e=>{p.textContent=text;e.target.remove()}},`展开全文（共 ${text.length} 字）`));
+  return w;
+}
+function buildItems(row){
+  const items=[];let n=0,cur=null;
+  row.prompt.forEach((m,i)=>{
+    if(m.role==="assistant"){n++;cur={type:"step",n,i,m,tools:[]};items.push(cur)}
+    else if(m.role==="tool"&&cur)cur.tools.push(m);
+    else{cur=null;items.push({type:"msg",m,i})}
+  });
+  const c=row.candidates&&row.candidates[0]&&row.candidates[0][0];
+  if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true})}
+  return items;
+}
+function renderMain(row,sum){
+  const M=$("#main");M.replaceChildren();
+  const tm=row.trajectory_metadata||{};
+  const tools=(row.tools||[]).map(t=>(t.function||t).name);
+  const meta=Object.fromEntries(Object.entries(tm).filter(([k])=>!["qc_sample","servers","monitor","traps"].includes(k)));
+  M.append(h("details",{class:"msg"},h("summary",{class:"hd"},"任务元信息 · 可用工具 "+tools.length+" 个"),
+    h("div",{class:"bd"},longPre(JSON.stringify(meta,null,1),"",1500),
+      h("div",{class:"lb"},"工具列表"),h("div",{class:"mut"},tools.join("、")||"—"))));
+  const items=buildItems(row);
+  const bar=h("div",{class:"btns",style:"margin:0 0 8px"},
+    h("button",{onclick:()=>toggleAll(true)},"展开全部步骤"),h("button",{onclick:()=>toggleAll(false)},"折叠（仅保留目标步骤）"),
+    h("button",{onclick:()=>jumpTgt()},"跳到目标步骤"),
+    h("label",{class:"mut"},h("input",{type:"checkbox",onchange:e=>onlyFail(e.target.checked)})," 只看有 Fail 的步骤"));
+  M.append(bar);
+  let tgtEl=null;
+  for(const it of items){
+    const el=it.type==="msg"?msgCard(it):stepCard(it,sum);
+    M.append(el);
+    if(it.type==="step"&&it.n===sum.step){tgtEl=el}
+  }
+  if(row.system_setting)M.insertBefore(msgCard({m:{role:"system",content:row.system_setting},i:"system_setting"}),bar);
+  M.scrollTop=0;
+  if(tgtEl)requestAnimationFrame(()=>tgtEl.scrollIntoView({block:"start"}));
+}
+const toggleAll=open=>document.querySelectorAll("#main .step").forEach(e=>{if(open||!e.classList.contains("tgt"))e._set(open)});
+const jumpTgt=()=>{const e=document.querySelector("#main .step.tgt");if(e)e.scrollIntoView({block:"start"})};
+const onlyFail=on=>document.querySelectorAll("#main .step,#main .msg:not(details)").forEach(e=>{
+  e.style.display=on&&!e.classList.contains("hasfail")&&!e.classList.contains("tgt")?"none":""});
+function msgCard(it){
+  const m=it.m,txt=textOf(m.content);
+  const el=h("div",{class:"msg"});
+  const body=h("div",{class:"bd"});
+  const open=m.role==="user";
+  const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
+    h("span",{class:"chip"},m.role),h("span",{class:"mut"},"#"+it.i),h("span",{class:"pv"},open?"":txt.slice(0,100).replace(/\s+/g," ")));
+  body.append(longPre(txt,"",4000));
+  el._set=o=>{body.hidden=!o;pvToggle(hd,o)};
+  el.append(hd,body);body.hidden=!open;if(open)pvToggle(hd,true);
+  return el;
+}
+const pvToggle=(hd,o)=>{const p=hd.querySelector(".pv");if(p)p.style.display=o?"none":""};
+
+const MK={ok:["同意机器","c-pass"],bad:["不同意机器","c-fail"],q:["存疑","c-unsure"]};
+function segs(text,label){
+  if(text==null||text==="")return null;
+  const t=typeof text==="string"?text:JSON.stringify(text,null,1);
+  const w=h("div",{},h("div",{class:"lb"},label));
+  t.split(/\s\|\s(?=\[S\d)/).forEach(p=>{
+    const m=p.match(/^\[([^\]]+)\]\s*/);
+    w.append(h("div",{class:"seg"},m?h("b",{},m[1]+" "):null,m?p.slice(m[0].length):p));
+  });
+  return w;
+}
+function judgeBlock(m,sum,openReason){
+  const sm=m.step_metadata||{},jr=sm.judge_result||{},cl=jr.checklist,rules=Array.isArray(sm.checklist)?sm.checklist:[];
+  const w=h("div",{},h("div",{class:"lb"},"机器判定（红=Fail 灰=NA 绿=Pass；红框=本样本被检查项）"));
+  if(cl){
+    const g=h("div",{class:"grid"});
+    for(const k in cl)g.append(h("span",{class:"chip c-"+cl[k].toLowerCase()+(k===sum.key?" c-tgt":""),title:k+": "+cl[k]},nm(k)+" "+cl[k]));
+    w.append(g);
+  }else w.append(h("div",{class:"mut"},"该步骤没有逐项判定"+(jr.skipped?"（已跳过："+JSON.stringify(jr.skipped)+"）":"")));
+  const bits=["trainable="+(jr.trainable??sm.trainable),jr.source&&"source="+jr.source,jr.judge_version,jr.rejudge_rounds&&"rejudge="+JSON.stringify(jr.rejudge_rounds),jr.skipped&&cl&&"skipped="+JSON.stringify(jr.skipped)].filter(Boolean);
+  w.append(h("div",{class:"mut",style:"font-size:12px"},bits.join(" · ")));
+  const rs=[segs(jr.reason,"判定理由（英文原文）"),segs(jr.reason_zh,"判定理由（中文）")].filter(Boolean);
+  if(rs.length)w.append(h("details",{open:openReason},h("summary",{class:"mut"},"展开判定理由"),rs));
+  if(rules.length)w.append(h("div",{class:"lb"},"规则检查"),...rules.map(r=>h("div",{class:"seg"},h("b",{},(r[0]||"")+" "),r.slice(1).join(" "))));
+  return w;
+}
+const getSt=(sum,n)=>((S.ann[sum.id]||{}).steps||{})[n];
+function paintMark(it,sum,mk){
+  const x=getSt(sum,it.n)||{};
+  mk.replaceChildren(...[x.mark?h("span",{class:"chip "+MK[x.mark][1]},"我："+MK[x.mark][0]):null,x.note&&x.note.trim()?h("span",{class:"chip"},"备注"):null].filter(Boolean));
+}
+function humanStep(it,sum,mk){
+  const st=()=>{const a=ann(sum.id);return a.steps[it.n]||(a.steps[it.n]={mark:null,note:""})};
+  const bt={};
+  return h("div",{class:"hum"},h("b",{},`我对 Step ${it.n} 的判断 `),
+    Object.keys(MK).map(k=>bt[k]=h("button",{class:(getSt(sum,it.n)||{}).mark===k?"on":"",onclick:()=>{const x=st();x.mark=x.mark===k?null:k;
+      Object.keys(bt).forEach(j=>bt[j].className=x.mark===j?"on":"");touch(ann(sum.id));paintMark(it,sum,mk);refreshItem(sum)}},MK[k][0])),
+    h("input",{type:"text",placeholder:"该步骤备注（自动保存）",value:(getSt(sum,it.n)||{}).note||"",oninput:e=>{st().note=e.target.value;touch(ann(sum.id));paintMark(it,sum,mk);refreshItem(sum)}}));
+}
+function callBlocks(it){
+  const calls=it.m.tool_calls||[],out=[];
+  calls.forEach((c,j)=>{
+    const a=typeof c.arguments==="string"?c.arguments:JSON.stringify(c.arguments,null,1);
+    out.push(h("div",{class:"call"},h("b",{},c.name||"(无名称)"),longPre(a||"",""  ,2000)));
+    const r=it.tools[j];
+    if(r&&it.tools.length===calls.length)out.push(h("div",{class:"res"},h("div",{class:"lb"},"工具返回"),longPre(textOf(r.content),"",3000)));
+  });
+  if(it.tools.length!==calls.length)it.tools.forEach((r,j)=>out.push(h("div",{class:"res"},h("div",{class:"lb"},`工具返回 #${j+1}（调用数与返回数不一致，未配对）`),longPre(textOf(r.content),"",3000))));
+  return out;
+}
+function stepCard(it,sum){
+  const m=it.m,sm=m.step_metadata||{},cl=(sm.judge_result||{}).checklist||{};
+  const fails=Object.keys(cl).filter(k=>cl[k]==="Fail"),rules=Array.isArray(sm.checklist)?sm.checklist:[];
+  const tgt=it.n===sum.step,txt=textOf(m.content),nc=(m.tool_calls||[]).length;
+  const el=h("div",{class:"step"+(tgt?" tgt":"")+(it.n>sum.step?" after":"")+(fails.length?" hasfail":"")});
+  const mk=h("span");
+  const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
+    h("b",{},it.cand?"最终回复":"Step "+it.n),tgt?h("span",{class:"chip c-fail"},"目标步骤"):null,
+    fails.map(k=>h("span",{class:"chip c-fail"+(k===sum.key?" c-tgt":""),title:k},nm(k))),
+    rules.length?h("span",{class:"chip c-unsure"},"规则 "+rules.length):null,
+    nc?h("span",{class:"chip"},"调用 "+nc):null,mk,
+    h("span",{class:"pv"},txt.slice(0,90).replace(/\s+/g," ")));
+  const body=h("div",{class:"bd",hidden:true});
+  let built=false;
+  el._set=o=>{
+    if(o&&!built){built=true;
+      if(m.reasoning_content)body.append(h("div",{class:"lb"},"思考（reasoning_content）"),longPre(m.reasoning_content,"th",4000));
+      if(txt)body.append(h("div",{class:"lb"},"回复文本"),longPre(txt,"",4000));
+      body.append(...callBlocks(it),judgeBlock(m,sum,tgt),humanStep(it,sum,mk));}
+    body.hidden=!o;
+  };
+  el.append(hd,body);
+  paintMark(it,sum,mk);
+  if(tgt)el._set(true);
+  return el;
+}
+const refreshItem=sum=>{const el=document.getElementById("it"+sum.k);if(el)paintItem(el,sum)};
+
+function renderSide(row,sum){
+  const q=row.trajectory_metadata.qc_sample,tm=row.trajectory_metadata,a=ann(sum.id);
+  const D=pairs=>h("dl",{},pairs.filter(p=>p[1]!=null&&p[1]!=="").map(([k,v])=>[h("dt",{},k),h("dd",{},String(v))]));
+  const btn={};
+  const setL=l=>{a.label=a.label===l?null:l;Object.keys(btn).forEach(k=>btn[k].className=a.label===k?"sel-"+k:"");touch(a);refreshItem(sum)};
+  const ta=h("textarea",{rows:5,placeholder:"备注：为什么同意 / 不同意机器的判断，证据在哪一步……（自动保存）",oninput:e=>{a.note=e.target.value;touch(a);refreshItem(sum)}});
+  ta.value=a.note||"";
+  const S2=$("#side");S2.replaceChildren(...[
+    h("h3",{},`样本 #${sum.k+1} / ${S.sum.length}`),
+    h("div",{},h("span",{class:"chip c-fail"},"机器判 Fail"),h("span",{class:"code",style:"margin-left:6px;font-size:15px"},`${q.check_code} ${q.check_item}`)),
+    D([["检查键",q.check_key],["目标步骤",`第 ${q.step} 步 / 共 ${q.n_steps} 步（${q.step_loc}）`],["判定分段",q.judge_split],
+       ["同步骤其它Fail",(q.step_fail_items||[]).join("、")]]),
+    h("div",{class:"lb"},"机器给出的理由（本检查项）"),
+    h("div",{class:"seg"},q.judge_reason_seg||"—"),
+    q.judge_reason_zh?h("details",{},h("summary",{class:"mut"},"中文翻译"),h("div",{class:"seg"},q.judge_reason_zh)):null,
+    h("div",{class:"hum"},h("b",{},"我的结论（对本检查项）"),
+      h("div",{class:"btns"},Object.keys(LBL).map((k,i)=>btn[k]=h("button",{class:a.label===k?"sel-"+k:"",onclick:()=>setL(k)},h("kbd",{},i+1)," ",LBL[k]))),
+      ta,
+      h("div",{class:"btns"},h("button",{onclick:()=>move(-1)},"← 上一条"),h("button",{onclick:()=>move(1)},"下一条 →"),h("button",{class:"pri",onclick:nextTodo},"下一未标注"))),
+    h("div",{class:"mut",style:"font-size:12px;margin:4px 0"},"快捷键：1/2/3 选结论，←/→ 切换样本，N 跳下一未标注（输入框内不触发）。"),
+    h("details",{},h("summary",{class:"mut"},"来源与元信息"),D([
+      ["来源",q.source],["数据集",q.dataset],["类别",q.category],["reward",tm.reward],["task_id",row.task_id],["data_id",q.data_id],
+      ["原文件",q.file?`${q.file} 第 ${q.line} 行`:null],["原人工标",q.human_label],["理由聚类",q.reason_cluster!=null?`#${q.reason_cluster}（占 ${q.reason_cluster_share}）${(q.reason_cluster_terms||[]).join(" ")}`:null],
+      ["描述",tm.description]]))].filter(Boolean));
+}
+document.addEventListener("keydown",e=>{
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey||S.cur<0)return;
+  const k=e.key;
+  if(k==="ArrowRight"){move(1);e.preventDefault()}
+  else if(k==="ArrowLeft"){move(-1);e.preventDefault()}
+  else if(k==="n"||k==="N")nextTodo();
+  else if("123".includes(k)&&k){const b=document.querySelectorAll("#side .btns button")[+k-1];if(b)b.click()}
+});
+const pick=f=>f&&loadFile(f).catch(err=>{status("读取失败："+err.message);console.error(err)});
+$("#bOpen").onclick=()=>$("#fOpen").click();
+$("#fOpen").onchange=e=>pick(e.target.files[0]);
+$("#bExpAll").onclick=()=>expAll();
+$("#bExpJson").onclick=expJson;
+$("#bExpCsv").onclick=expCsv;
+$("#bImp").onclick=()=>$("#fImp").click();
+$("#fImp").onchange=e=>{const f=e.target.files[0];if(f)impAnn(f).catch(err=>status("导入失败："+err.message));e.target.value=""};
+addEventListener("dragover",e=>e.preventDefault());
+addEventListener("drop",e=>{e.preventDefault();pick(e.dataTransfer.files[0])});
+addEventListener("beforeunload",()=>{clearTimeout(saveT);persist()});
+
+</script></body></html>
