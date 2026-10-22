@@ -32,6 +32,7 @@ header .sp{flex:1}
 .c-pass{background:var(--grnbg);color:var(--grn);border-color:#b8e0c8}
 .c-na{background:#f1f2f4;color:#8a949e}
 .c-unsure{background:var(--ambbg);color:var(--amb);border-color:#f0d89a}
+.c-na{color:var(--mut);border-style:dashed;background:#fff}
 .c-tgt{outline:2px solid var(--red);outline-offset:1px;font-weight:600}
 .c-key{outline:2px solid var(--blu);outline-offset:1px;font-weight:600}
 .code{font-weight:600;color:var(--blu)}
@@ -324,15 +325,16 @@ function longPre(text,cls,lim=3000){
 function buildItems(row){
   const items=[];let n=0,cur=null;
   // 顶层 labels 与 prompt 逐条对齐（本数据 229/229 行长度相等）：assistant 消息才可能为 1，其余一律 0
+  // lab=null 表示本行压根没有 labels 字段（整行不标）；"?" 表示有 labels 但这条位置取不到值（长度对不齐）
   const lab=Array.isArray(row.labels)?row.labels:null;
   row.prompt.forEach((m,i)=>{
-    if(m.role==="assistant"){n++;cur={type:"step",n,i,m,tools:[],lab:lab?lab[i]:null};items.push(cur)}
+    if(m.role==="assistant"){n++;cur={type:"step",n,i,m,tools:[],lab:lab?(typeof lab[i]==="number"?lab[i]:"?"):null};items.push(cur)}
     else if(m.role==="tool"&&cur)cur.tools.push(m);
     else{cur=null;items.push({type:"msg",m,i})}
   });
   const c=row.candidates&&row.candidates[0]&&row.candidates[0][0];
-  // 最终回复在 candidates 里，labels 只覆盖 prompt，所以它没有 label
-  if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true,lab:null})}
+  // 最终回复在 candidates 里，labels 只覆盖 prompt，所以给个 "—" 占位、别让这个位置看起来像漏标了
+  if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true,lab:lab?"—":null})}
   return items;
 }
 function stepInfo(it){
@@ -359,9 +361,11 @@ function overview(row,sum,items){
   const z=steps.filter(it=>it.lab===0).map(it=>it.n);
   const strip=h("div",{class:"sstrip"},steps.map(it=>{
     const d=inf.get(it.n),c=d.bad.length?"f":d.judged?"p":"u";
+    // 步骤条上只标 prompt 里取到的数值；"—"（最终回复）不占位，免得一条占位符混在 0/1 里误读
+    const ls=it.lab==null||it.lab==="—"?null:String(it.lab);
     return h("span",{class:"sc "+c+(fk&&it.n===sum.step?" t":"")+(it.lab===0?" l0":""),
-      title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+(it.lab==null?"":" · label="+it.lab)+"（点击跳转）",
-      onclick:()=>jumpStep(it.n)},it.cand?"末":it.n,it.lab==null?null:h("sup",{},String(it.lab)))}));
+      title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+(ls?" · label="+ls:"")+"（点击跳转）",
+      onclick:()=>jumpStep(it.n)},it.cand?"末":it.n,ls?h("sup",{},ls):null)}));
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
     h("span",{class:"n"},stepName(it)),
     h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
@@ -523,7 +527,10 @@ function stepCard(it,sum){
   const mk=h("span");
   const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
     h("b",{},it.cand?"最终回复":"Step "+it.n),tgt?h("span",{class:"chip c-fail"},"目标步骤"):null,
-    it.lab==null?null:h("span",{class:"chip"+(it.lab===0?" c-unsure":""),title:"顶层 labels 数组里这条消息对应位置的值（本数据集中只有 assistant 消息可能为 1，system/user/tool 一律 0；与 trainable 是两个独立字段）"},"label="+it.lab),
+    it.lab==null?null:h("span",{class:"chip"+(it.lab===0?" c-unsure":"")+(typeof it.lab==="number"?"":" c-na"),
+      title:typeof it.lab==="number"?"顶层 labels 数组里这条消息对应位置的值（本数据集中只有 assistant 消息可能为 1，system/user/tool 一律 0；与 trainable 是两个独立字段）"
+        :it.cand?"最终回复来自 candidates，而顶层 labels 只覆盖 prompt，所以这条没有对应的 0/1"
+        :"本行有 labels 字段，但它的长度与 prompt 对不齐，这个位置取不到值"},"label="+it.lab),
     fails.map(k=>h("span",{class:"chip c-fail"+(k===fkey(sum)?" c-key":""),title:k},nm(k))),
     rules.length?h("span",{class:"chip c-unsure"},"规则 "+rules.length):null,
     nc?h("span",{class:"chip"},"调用 "+nc):null,mk,
