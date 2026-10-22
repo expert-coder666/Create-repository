@@ -73,6 +73,8 @@ kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding
 .sc.u{background:#f1f2f4;color:#8a949e;border-style:dashed}
 .sc.p{background:var(--grnbg);color:var(--grn);border-color:#9fd4b4;font-weight:600}
 .sc.t{outline:2px solid var(--red);outline-offset:1px}
+.sc sup{font-size:9px;font-weight:400;opacity:.85;margin-left:1px}
+.sc.l0 sup{color:var(--red);opacity:1;font-weight:700}
 .flist{margin:4px 0 0;display:grid;gap:3px;max-height:176px;overflow:auto}
 .frow{display:flex;gap:6px;align-items:center;padding:3px 6px;border:1px solid #f0d4cf;background:#fdf6f5;border-radius:6px;cursor:pointer;font-size:12.5px}
 .frow:hover{background:var(--redbg)}
@@ -321,13 +323,16 @@ function longPre(text,cls,lim=3000){
 }
 function buildItems(row){
   const items=[];let n=0,cur=null;
+  // 顶层 labels 与 prompt 逐条对齐（本数据 229/229 行长度相等）：assistant 消息才可能为 1，其余一律 0
+  const lab=Array.isArray(row.labels)?row.labels:null;
   row.prompt.forEach((m,i)=>{
-    if(m.role==="assistant"){n++;cur={type:"step",n,i,m,tools:[]};items.push(cur)}
+    if(m.role==="assistant"){n++;cur={type:"step",n,i,m,tools:[],lab:lab?lab[i]:null};items.push(cur)}
     else if(m.role==="tool"&&cur)cur.tools.push(m);
     else{cur=null;items.push({type:"msg",m,i})}
   });
   const c=row.candidates&&row.candidates[0]&&row.candidates[0][0];
-  if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true})}
+  // 最终回复在 candidates 里，labels 只覆盖 prompt，所以它没有 label
+  if(c){n++;items.push({type:"step",n,i:"最终回复",m:c,tools:[],cand:true,lab:null})}
   return items;
 }
 function stepInfo(it){
@@ -351,11 +356,12 @@ function overview(row,sum,items){
   const nk=steps.filter(it=>inf.get(it.n).bad.includes(sum.key)).length;
   const agg={};bads.forEach(it=>inf.get(it.n).bad.forEach(k=>agg[k]=(agg[k]||0)+1));
   const fk=fkey(sum);
+  const z=steps.filter(it=>it.lab===0).map(it=>it.n);
   const strip=h("div",{class:"sstrip"},steps.map(it=>{
     const d=inf.get(it.n),c=d.bad.length?"f":d.judged?"p":"u";
-    return h("span",{class:"sc "+c+(fk&&it.n===sum.step?" t":""),
-      title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+"（点击跳转）",
-      onclick:()=>jumpStep(it.n)},it.cand?"末":it.n)}));
+    return h("span",{class:"sc "+c+(fk&&it.n===sum.step?" t":"")+(it.lab===0?" l0":""),
+      title:stepName(it)+" · "+(d.bad.length?"Fail："+d.bad.map(nm).join("、"):d.judged?"全部通过":"未判定")+(it.lab==null?"":" · label="+it.lab)+"（点击跳转）",
+      onclick:()=>jumpStep(it.n)},it.cand?"末":it.n,it.lab==null?null:h("sup",{},String(it.lab)))}));
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
     h("span",{class:"n"},stepName(it)),
     h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
@@ -381,12 +387,13 @@ function overview(row,sum,items){
       h("span",{},"有 Fail 的步 ",h("b",{style:bads.length?"color:var(--red)":""},bads.length)),
       fk?h("span",{},"本检查项 Fail 的步 ",h("b",{style:nk?"color:var(--red)":""},nk)):h("span",{},"Fail 类别 ",h("b",{},Object.keys(agg).length)," 类"),
       h("span",{},"未判定步 ",h("b",{},nu)),
+      h("span",{},"label=0 的步 ",h("b",{},z.length?(z.length>12?z.slice(0,12).join("、")+` 等 ${z.length} 个`:z.join("、")):"无")),
       h("span",{},"判定分段 ",h("b",{},sum.split||"—")),
       fk?h("span",{},"同步骤其它 Fail ",h("b",{},(sum.fails||[]).join("、")||"—")):null),
     Object.keys(agg).length?h("div",{},h("div",{class:"lb"},fk?"整条轨迹的 Fail 分布（蓝圈 = 本次质检的检查项；点下方条目可跳转）":"整条轨迹的 Fail 分布（左侧为「全部检查项」，此处一律平等展示；点下方条目可跳转）"),
       h("div",{class:"grid"},Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([k,c])=>
         h("span",{class:"chip c-fail"+(k===fk?" c-key":"")},`${nm(k)} ×${c}`)))):null,
-    h("div",{class:"lb"},fk?`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`:"步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定；点击跳转）"),
+    h("div",{class:"lb"},(fk?`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步`:"步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定")+"；右上角小数字 = labels 里该步的 0/1，0 标红；最终回复在 candidates 里、没有 label；点击跳转）"),
     strip,
     flist,
     ovConcl);
@@ -516,6 +523,7 @@ function stepCard(it,sum){
   const mk=h("span");
   const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
     h("b",{},it.cand?"最终回复":"Step "+it.n),tgt?h("span",{class:"chip c-fail"},"目标步骤"):null,
+    it.lab==null?null:h("span",{class:"chip"+(it.lab===0?" c-unsure":""),title:"顶层 labels 数组里这条消息对应位置的值（本数据集中只有 assistant 消息可能为 1，system/user/tool 一律 0；与 trainable 是两个独立字段）"},"label="+it.lab),
     fails.map(k=>h("span",{class:"chip c-fail"+(k===fkey(sum)?" c-key":""),title:k},nm(k))),
     rules.length?h("span",{class:"chip c-unsure"},"规则 "+rules.length):null,
     nc?h("span",{class:"chip"},"调用 "+nc):null,mk,
