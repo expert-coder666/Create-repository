@@ -357,6 +357,17 @@ function overview(row,sum,items){
   const flist=bads.length?h("div",{class:"flist"},bads.map(it=>h("div",{class:"frow",title:"点击跳到该步骤",onclick:()=>jumpStep(it.n)},
     h("span",{class:"n"},stepName(it)),
     h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
+  // 结论区：聚焦某个检查项时只给该项所在分段（sum.seg）；通览时换成该步完整判定理由，S1~S5 全分段摊开，覆盖该步所有检查项
+  const tjr=((steps.find(it=>it.n===sum.step)||{m:{}}).m.step_metadata||{}).judge_result||{};
+  const segBlock=sum.seg?h("details",{open:!!fk},h("summary",{class:"mut"},fk?"机器对本检查项的结论":`机器对被检查项 ${sum.code||"—"} 的结论`),
+    h("div",{class:"seg"},sum.seg),
+    sum.segzh?h("div",{class:"seg"},sum.segzh):null):null;
+  // 注意：原始数据里 reason_zh 只翻译了本样本 judge_split 那一段，通览时要标清楚，别被当成全文翻译
+  const nseg=t=>t?String(t).split(/\s\|\s(?=\[S\d)/).length:0;
+  const ovConcl=fk?segBlock
+    :(tjr.reason||tjr.reason_zh)?h("details",{},h("summary",{class:"mut"},`机器对第 ${sum.step} 步的完整判定理由（按 S1~S5 分段，覆盖该步全部检查项）`),
+      segs(tjr.reason,"英文原文"),segs(tjr.reason_zh,nseg(tjr.reason_zh)<nseg(tjr.reason)?`中文（原数据只翻译了 ${sum.split||"本"} 分段）`:"中文"))
+    :segBlock;
   return h("div",{class:"ov"},
     h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
       h("span",{class:"chip c-fail"},"机器判 Fail"),
@@ -376,9 +387,7 @@ function overview(row,sum,items){
     h("div",{class:"lb"},fk?`步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定，红圈 = 目标步骤即第 ${sum.step} 步；点击跳转）`:"步骤条（红底 = 有 Fail，绿底 = 全通过，灰虚线 = 未判定；点击跳转）"),
     strip,
     flist,
-    sum.seg?h("details",{open:!!fk},h("summary",{class:"mut"},fk?"机器对本检查项的结论":`机器对被检查项 ${sum.code||"—"} 的结论`),
-      h("div",{class:"seg"},sum.seg),
-      sum.segzh?h("div",{class:"seg"},sum.segzh):null):null);
+    ovConcl);
 }
 function renderMain(row,sum){
   const M=$("#main");M.replaceChildren();
