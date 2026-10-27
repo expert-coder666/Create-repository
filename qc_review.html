@@ -97,7 +97,7 @@ kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding
   <span id="fname" class="mut"></span>
   <span id="stat"></span>
   <span class="sp"></span>
-  <button id="bTx" title="把当前样本里已展开的英文文本块翻成中文（判定理由、本检查项结论、回复文本、思考）。用 Chrome 内置的端侧翻译模型，文本不出浏览器、不经任何服务器">译 全部</button>
+  <button id="bTx" title="把当前样本里已展开的英文文本块翻成中文（user/system 消息、工具返回、判定理由、本检查项结论、回复文本、思考；JSON 参数这类结构化内容不翻）。用 Chrome 内置的端侧翻译模型，文本不出浏览器、不经任何服务器">译 全部</button>
   <span id="txst" class="mut"></span>
   <span class="sp"></span>
   <button id="bExpAll" title="导出带 human_label / human_note 的完整 jsonl（未标注的行原样保留）">导出完整 jsonl</button>
@@ -450,9 +450,13 @@ function msgCard(it){
   const open=m.role==="user";
   const hd=h("div",{class:"hd",onclick:()=>el._set(body.hidden)},
     h("span",{class:"chip"},m.role),h("span",{class:"mut"},"#"+it.i),h("span",{class:"pv"},open?"":txt.slice(0,100).replace(/\s+/g," ")));
-  body.append(longPre(txt,"",4000));
-  el._set=o=>{body.hidden=!o;pvToggle(hd,o)};
-  el.append(hd,body);body.hidden=!open;if(open)pvToggle(hd,true);
+  // 和步骤卡一样延迟构造：折叠着的 system prompt 往往上万字，提前挂「译」会让「译 全部」去翻没人看的内容
+  let built=false;
+  const build=()=>{if(built)return;built=true;
+    // user / system / tool 这些非 assistant 消息同样可能是整段英文（尤其 user 的长 prompt），一并挂上「译」
+    body.append(txBlock(txt,h("div",{},longPre(txt,"",4000))))};
+  el._set=o=>{if(o)build();body.hidden=!o;pvToggle(hd,o)};
+  el.append(hd,body);if(open)build();body.hidden=!open;if(open)pvToggle(hd,true);
   return el;
 }
 const pvToggle=(hd,o)=>{const p=hd.querySelector(".pv");if(p)p.style.display=o?"none":""};
@@ -488,7 +492,28 @@ async function txReady(){
   }
 }
 const txSt=s=>{const e=document.getElementById("txst");if(e)e.textContent=s||""};
-async function txText(s){
+// 超长文本先按空行切块再分别翻：端侧模型对单次输入有配额，user 这种几千字的长 prompt
+// 整段喂进去容易超限；切块还能让缓存在块粒度上复用（同一段话在多条样本里反复出现）
+function txChunks(s,lim=2000){
+  const out=[];let cur="";
+  s.split(/\n{2,}/).forEach(p=>{
+    if(!cur)cur=p;
+    else if(cur.length+p.length+2<=lim)cur+="\n\n"+p;
+    else{out.push(cur);cur=p}
+  });
+  if(cur)out.push(cur);
+  // 单段本身就超长（整段没有空行）再按句末标点切
+  const fin=[];
+  out.forEach(c=>{
+    if(c.length<=lim*2){fin.push(c);return}
+    let b="";
+    c.split(/(?<=[.!?。！？])\s+/).forEach(sent=>{
+      if(b&&b.length+sent.length+1>lim){fin.push(b);b=sent}else b=b?b+" "+sent:sent});
+    if(b)fin.push(b);
+  });
+  return fin;
+}
+async function txOne(s){
   // 长文本用长度+前缀做 key，避免整段当 key 占内存
   const k=s.length>200?s.length+"|"+s.slice(0,200):s;
   if(TX.cache.has(k))return TX.cache.get(k);
@@ -497,15 +522,22 @@ async function txText(s){
   const out=await tr.translate(s);
   TX.cache.set(k,out);return out;
 }
+async function txText(s,onp){
+  // 2000 字以内整块翻，保留上下文也省调用次数；超过了才切块，避免单次输入过长超端侧模型配额
+  const cs=s.length<=2000?[s]:txChunks(s,2000),res=[];
+  for(let i=0;i<cs.length;i++){if(onp&&cs.length>1)onp(i+1,cs.length);res.push(await txOne(cs[i]))}
+  return res.join("\n\n");
+}
 // 给一个文本块挂「译」按钮：原文永远保留，译文追加在下面，不替换、不改动原文节点
 function txBlock(text,host){
   if(!text||!/[A-Za-z]{4}/.test(text))return host;   // 没有成词的英文就不挂按钮
+  if(/^\s*[{[]/.test(text))return host;              // JSON 结构块（元信息、工具参数）不翻，译了反而不好对照
   const out=h("div",{class:"tr",hidden:true});
   const b=h("button",{class:"txb",title:"端侧翻译，文本不外传"},"译");
   const done=()=>!!out.textContent&&!out.classList.contains("err");
   const doTx=async()=>{
     b.disabled=true;b.textContent="翻译中…";out.classList.remove("err");
-    try{out.textContent=await txText(text);out.hidden=false;b.textContent="隐藏译文"}
+    try{out.textContent=await txText(text,(i,n)=>{b.textContent=`翻译中 ${i}/${n}`});out.hidden=false;b.textContent="隐藏译文"}
     catch(e){out.textContent="翻译不可用："+String(e.message||e);out.classList.add("err");out.hidden=false;b.textContent="重试"}
     finally{b.disabled=false}
   };
@@ -513,7 +545,9 @@ function txBlock(text,host){
   b.onclick=()=>{if(done()){out.hidden=!out.hidden;b.textContent=out.hidden?"译":"隐藏译文"}else doTx()};
   host.append(b,out);
   // 「译 全部」用的入口：已翻过的只负责展开出来，没翻过的才真跑
-  S.txEls.push(()=>{if(done()){out.hidden=false;b.textContent="隐藏译文";return null}return doTx()});
+  const reg=()=>{if(done()){out.hidden=false;b.textContent="隐藏译文";return null}return doTx()};
+  reg.len=text.length;        // 让「译 全部」能先算出总字数，提前告诉人这趟有多大
+  S.txEls.push(reg);
   return host;
 }
 async function txAll(){
@@ -525,11 +559,15 @@ async function txAll(){
   // 而且失败时只报一次，不要给 138 个块各挂一条同样的红字
   const tr=await txReady();
   if(!tr){b.disabled=false;txSt("翻译不可用："+TX.err);return}
+  // 全展开的样本可能有几十万字，先报个总量，免得人盯着进度条不知道要等多久
+  const kc=Math.round(fs.reduce((a,f)=>a+(f.len||0),0)/1000);
   let i=0;
   // 串行跑：端侧模型并发请求容易相互拖慢，而且顺序出结果更容易看出进度
-  for(const f of fs){i++;b.textContent=`翻译中 ${i}/${fs.length}`;try{await f()}catch(e){}}
+  for(const f of fs){i++;b.textContent=`翻译中 ${i}/${fs.length}`;
+    txSt(`共 ${fs.length} 块 / 约 ${kc}k 字，端侧串行，字多时要等几分钟`);
+    try{await f()}catch(e){}}
   b.textContent="译 全部";b.disabled=false;
-  txSt(`已翻译 ${fs.length} 块（端侧，未外传）`);
+  txSt(`已翻译 ${fs.length} 块 / 约 ${kc}k 字（端侧，未外传）`);
 }
 function segs(text,label,tx){
   if(text==null||text==="")return null;
@@ -594,9 +632,9 @@ function callBlocks(it){
     const a=typeof c.arguments==="string"?c.arguments:JSON.stringify(c.arguments,null,1);
     out.push(h("div",{class:"call"},h("b",{},c.name||"(无名称)"),longPre(a||"",""  ,2000)));
     const r=it.tools[j];
-    if(r&&it.tools.length===calls.length)out.push(h("div",{class:"res"},h("div",{class:"lb"},"工具返回"),longPre(textOf(r.content),"",3000)));
+    if(r&&it.tools.length===calls.length)out.push(txBlock(textOf(r.content),h("div",{class:"res"},h("div",{class:"lb"},"工具返回"),longPre(textOf(r.content),"",3000))));
   });
-  if(it.tools.length!==calls.length)it.tools.forEach((r,j)=>out.push(h("div",{class:"res"},h("div",{class:"lb"},`工具返回 #${j+1}（调用数与返回数不一致，未配对）`),longPre(textOf(r.content),"",3000))));
+  if(it.tools.length!==calls.length)it.tools.forEach((r,j)=>out.push(txBlock(textOf(r.content),h("div",{class:"res"},h("div",{class:"lb"},`工具返回 #${j+1}（调用数与返回数不一致，未配对）`),longPre(textOf(r.content),"",3000)))));
   return out;
 }
 function stepCard(it,sum){
