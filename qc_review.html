@@ -52,6 +52,10 @@ pre.th{background:#fbf9f1}
 .grid{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
 .seg{margin:4px 0;padding:6px 8px;background:#f7f8fa;border-radius:6px;font-size:13px;white-space:pre-wrap}
 .seg b{color:var(--blu)}
+.txb{font-size:11px;line-height:16px;padding:0 6px;margin-top:4px;color:var(--blu);background:#fff;border:1px solid var(--bd);border-radius:9px;cursor:pointer}
+.txb:disabled{color:var(--mut);cursor:default}
+.tr{margin:4px 0 2px;padding:6px 8px;background:var(--blubg);border-left:3px solid var(--blu);border-radius:4px;font-size:13px;white-space:pre-wrap}
+.tr.err{background:var(--redbg);border-left-color:var(--red);color:var(--red)}
 .hum{margin-top:8px;padding:6px 8px;background:var(--ambbg);border-radius:6px}
 .hum input[type=text]{width:100%;margin-top:4px}
 .btns{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
@@ -93,6 +97,9 @@ kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding
   <span id="fname" class="mut"></span>
   <span id="stat"></span>
   <span class="sp"></span>
+  <button id="bTx" title="把当前样本里已展开的英文文本块翻成中文（判定理由、本检查项结论、回复文本、思考）。用 Chrome 内置的端侧翻译模型，文本不出浏览器、不经任何服务器">译 全部</button>
+  <span id="txst" class="mut"></span>
+  <span class="sp"></span>
   <button id="bExpAll" title="导出带 human_label / human_note 的完整 jsonl（未标注的行原样保留）">导出完整 jsonl</button>
   <button id="bExpJson">导出标注 JSON</button>
   <button id="bExpCsv">导出 CSV</button>
@@ -106,7 +113,7 @@ kbd{border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding
 </div>
 <script>
 "use strict";
-const S={file:null,offs:[],sum:[],cur:-1,cache:new Map(),ann:{},names:{},splits:{},order:[],view:[],flt:{code:"",st:"",split:"",q:""}};
+const S={file:null,offs:[],sum:[],cur:-1,cache:new Map(),ann:{},names:{},splits:{},order:[],view:[],txEls:[],flt:{code:"",st:"",split:"",q:""}};
 const LS="qcrev.v1";
 const $=s=>document.querySelector(s);
 function h(tag,props,...kids){
@@ -371,15 +378,17 @@ function overview(row,sum,items){
     h("span",{},inf.get(it.n).bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),style:"margin-right:4px"},nm(k))))))):null;
   // 结论区：聚焦某个检查项时只给该项所在分段（sum.seg）；通览时换成该步完整判定理由，S1~S6 全分段摊开，覆盖该步所有判定维度
   const tjr=((steps.find(it=>it.n===sum.step)||{m:{}}).m.step_metadata||{}).judge_result||{};
-  const segBlock=sum.seg?h("details",{open:!!fk},h("summary",{class:"mut"},fk?"机器对本检查项的结论":`机器对被检查项 ${sum.code||"—"} 的结论`),
-    h("div",{class:"seg"},sum.seg),
+  // 延迟构造：通览分支里 segBlock 用不上，提前建会让它的「译」按钮注册到一个游离节点上，
+  // 导致「译 全部」白跑一次模型调用
+  const segBlock=()=>sum.seg?h("details",{open:!!fk},h("summary",{class:"mut"},fk?"机器对本检查项的结论":`机器对被检查项 ${sum.code||"—"} 的结论`),
+    txBlock(sum.seg,h("div",{},h("div",{class:"seg"},sum.seg))),
     sum.segzh?h("div",{class:"seg"},sum.segzh):null):null;
   // 注意：原始数据里 reason_zh 只翻译了本样本 judge_split 那一段，通览时要标清楚，别被当成全文翻译
   const nseg=t=>t?String(t).split(/\s\|\s(?=\[S\d)/).length:0;
-  const ovConcl=fk?segBlock
+  const ovConcl=fk?segBlock()
     :(tjr.reason||tjr.reason_zh)?h("details",{},h("summary",{class:"mut"},`机器对第 ${sum.step} 步的完整判定理由（按 S1~S6 分段，覆盖该步所有判定维度）`),
-      segs(tjr.reason,"英文原文"),segs(tjr.reason_zh,nseg(tjr.reason_zh)<nseg(tjr.reason)?`中文（原数据只翻译了 ${sum.split||"本"} 分段）`:"中文"))
-    :segBlock;
+      segs(tjr.reason,"英文原文",true),segs(tjr.reason_zh,nseg(tjr.reason_zh)<nseg(tjr.reason)?`中文（原数据只翻译了 ${sum.split||"本"} 分段）`:"中文"))
+    :segBlock();
   return h("div",{class:"ov"},
     h("h4",{},`总揽 · 样本 #${sum.k+1}/${S.sum.length}`,
       h("span",{class:"chip c-fail"},"机器判 Fail"),
@@ -405,6 +414,8 @@ function overview(row,sum,items){
 function renderMain(row,sum){
   const M=$("#main");M.replaceChildren();
   S.stepEls={};
+  // 换样本时清空翻译块注册表；展开新步骤时会继续往里追加
+  S.txEls=[];txSt("");
   const tm=row.trajectory_metadata||{};
   const tools=(row.tools||[]).map(t=>(t.function||t).name);
   const meta=Object.fromEntries(Object.entries(tm).filter(([k])=>!["qc_sample","servers","monitor","traps"].includes(k)));
@@ -455,13 +466,82 @@ function splitNote(tag){
   return h("span",{class:"mut",style:"font-size:12px",title:ks.map(nm).join("、")},
     `本文件中 ${ks.map(k=>(S.names[k]||{}).code||k).join(" / ")} 归此段`);
 }
-function segs(text,label){
+// ===== 翻译 =====
+// 用 Chrome 内置的端侧 Translator API（Chrome 138+）。模型跑在本机，文本不出浏览器、不经任何服务器，
+// 所以这个页面可以继续挂在 Pages 上公开访问而不产生数据外传。不可用时只提示，不做任何网络兜底。
+const TX={tr:null,av:"",cache:new Map(),err:""};
+async function txReady(){
+  if(TX.tr)return TX.tr;
+  if(typeof Translator==="undefined"){TX.err="当前浏览器没有内置翻译 API（需要 Chrome / Edge 138 及以上）";return null}
+  try{
+    // av 在页面加载时就探过一次了。这里不再 await availability()，是因为语言包未下载时
+    // create() 要求在「用户手势」里调用，中间多一次异步等待有可能把手势窗口耗掉
+    const av=TX.av||await Translator.availability({sourceLanguage:"en",targetLanguage:"zh"});
+    if(av==="unavailable"){TX.err="浏览器报告 en→zh 不可用（可能是系统语言或策略限制）";return null}
+    txSt(av==="available"?"正在初始化翻译模型…":"首次使用要下载语言包，可能要等一会…");
+    TX.tr=await Translator.create({sourceLanguage:"en",targetLanguage:"zh"});
+    TX.av="available";txSt("");return TX.tr;
+  }catch(e){
+    const msg=String(e&&e.message||e);
+    TX.err=/user gesture/i.test(msg)?"首次使用需要下载语言包，请再点一次按钮（浏览器要求下载动作由点击直接触发）":msg;
+    txSt("");return null;
+  }
+}
+const txSt=s=>{const e=document.getElementById("txst");if(e)e.textContent=s||""};
+async function txText(s){
+  // 长文本用长度+前缀做 key，避免整段当 key 占内存
+  const k=s.length>200?s.length+"|"+s.slice(0,200):s;
+  if(TX.cache.has(k))return TX.cache.get(k);
+  const tr=await txReady();
+  if(!tr)throw new Error(TX.err||"翻译不可用");
+  const out=await tr.translate(s);
+  TX.cache.set(k,out);return out;
+}
+// 给一个文本块挂「译」按钮：原文永远保留，译文追加在下面，不替换、不改动原文节点
+function txBlock(text,host){
+  if(!text||!/[A-Za-z]{4}/.test(text))return host;   // 没有成词的英文就不挂按钮
+  const out=h("div",{class:"tr",hidden:true});
+  const b=h("button",{class:"txb",title:"端侧翻译，文本不外传"},"译");
+  const done=()=>!!out.textContent&&!out.classList.contains("err");
+  const doTx=async()=>{
+    b.disabled=true;b.textContent="翻译中…";out.classList.remove("err");
+    try{out.textContent=await txText(text);out.hidden=false;b.textContent="隐藏译文"}
+    catch(e){out.textContent="翻译不可用："+String(e.message||e);out.classList.add("err");out.hidden=false;b.textContent="重试"}
+    finally{b.disabled=false}
+  };
+  // 按钮：已翻过就只折叠/展开，不重复调模型
+  b.onclick=()=>{if(done()){out.hidden=!out.hidden;b.textContent=out.hidden?"译":"隐藏译文"}else doTx()};
+  host.append(b,out);
+  // 「译 全部」用的入口：已翻过的只负责展开出来，没翻过的才真跑
+  S.txEls.push(()=>{if(done()){out.hidden=false;b.textContent="隐藏译文";return null}return doTx()});
+  return host;
+}
+async function txAll(){
+  const b=document.getElementById("bTx");if(!b)return;
+  const fs=S.txEls.slice();
+  if(!fs.length){txSt("本样本没有需要翻译的英文块");return}
+  b.disabled=true;
+  // 先在点击这一下里把模型准备好：语言包未下载时 create() 必须由用户手势直接触发，
+  // 而且失败时只报一次，不要给 138 个块各挂一条同样的红字
+  const tr=await txReady();
+  if(!tr){b.disabled=false;txSt("翻译不可用："+TX.err);return}
+  let i=0;
+  // 串行跑：端侧模型并发请求容易相互拖慢，而且顺序出结果更容易看出进度
+  for(const f of fs){i++;b.textContent=`翻译中 ${i}/${fs.length}`;try{await f()}catch(e){}}
+  b.textContent="译 全部";b.disabled=false;
+  txSt(`已翻译 ${fs.length} 块（端侧，未外传）`);
+}
+function segs(text,label,tx){
   if(text==null||text==="")return null;
   const t=typeof text==="string"?text:JSON.stringify(text,null,1);
   const w=h("div",{},h("div",{class:"lb"},label));
   t.split(/\s\|\s(?=\[S\d)/).forEach(p=>{
     const m=p.match(/^\[([^\]]+)\]\s*/);
-    w.append(h("div",{class:"seg"},m?h("div",{},h("b",{},m[1]+" "),splitNote(m[1])):null,m?p.slice(m[0].length):p));
+    const body=m?p.slice(m[0].length):p;
+    // 逐段挂「译」：分段本来就是独立判定，分开翻比整段翻更好对照，也避免一次喂太长的文本
+    // 按钮和译文放在 .seg 盒子外面的包裹层里，原文盒子的 textContent 保持干净
+    const el=h("div",{class:"seg"},m?h("div",{},h("b",{},m[1]+" "),splitNote(m[1])):null,body);
+    w.append(tx?txBlock(body,h("div",{},el)):el);
   });
   return w;
 }
@@ -480,7 +560,7 @@ function judgeBlock(m,sum,tgt){
     tgt?h("span",{class:"chip c-tgt"},"目标步骤"):null));
   if(bad.length)w.append(h("div",{class:"lb"},"不通过的检查项"+(fk&&bad.includes(fk)?"（蓝圈 = 本样本被检查项）":"")),
     h("div",{class:"grid"},bad.map(k=>h("span",{class:"chip c-fail"+(k===fk?" c-key":""),title:k},nm(k)))));
-  if(tgt&&sum.seg)w.append(h("div",{class:"lb"},"机器对本检查项的结论"),h("div",{class:"seg"},sum.seg),
+  if(tgt&&sum.seg)w.append(h("div",{class:"lb"},"机器对本检查项的结论"),txBlock(sum.seg,h("div",{},h("div",{class:"seg"},sum.seg))),
     sum.segzh?h("div",{class:"seg"},sum.segzh):null);
   w.append(h("div",{class:"lb"},"逐项判定（红=Fail 灰=NA 绿=Pass"+(fk?"；蓝圈 = 本样本被检查项":"")+"）"));
   if(cl){
@@ -490,7 +570,7 @@ function judgeBlock(m,sum,tgt){
   }else w.append(h("div",{class:"mut"},"该步骤没有逐项判定"+(jr.skipped?"（已跳过："+JSON.stringify(jr.skipped)+"）":"")));
   const bits=["trainable="+(jr.trainable??sm.trainable),jr.source&&"source="+jr.source,jr.judge_version,jr.rejudge_rounds&&"rejudge="+JSON.stringify(jr.rejudge_rounds),jr.skipped&&cl&&"skipped="+JSON.stringify(jr.skipped)].filter(Boolean);
   w.append(h("div",{class:"mut",style:"font-size:12px"},bits.join(" · ")));
-  const rs=[segs(jr.reason,"判定理由（英文原文）"),segs(jr.reason_zh,"判定理由（中文）")].filter(Boolean);
+  const rs=[segs(jr.reason,"判定理由（英文原文）",true),segs(jr.reason_zh,"判定理由（中文）")].filter(Boolean);
   if(rs.length)w.append(h("details",{open:tgt||bad.length>0},h("summary",{class:"mut"},"判定理由（按 S1~S6 分段）"),rs));
   if(rules.length)w.append(h("div",{class:"lb"},"规则检查"),...rules.map(r=>h("div",{class:"seg"},h("b",{},(r[0]||"")+" "),r.slice(1).join(" "))));
   return w;
@@ -539,8 +619,9 @@ function stepCard(it,sum){
   let built=false;
   el._set=o=>{
     if(o&&!built){built=true;
-      if(m.reasoning_content)body.append(h("div",{class:"lb"},"思考（reasoning_content）"),longPre(m.reasoning_content,"th",4000));
-      if(txt)body.append(h("div",{class:"lb"},"回复文本"),longPre(txt,"",4000));
+      if(m.reasoning_content)body.append(h("div",{class:"lb"},"思考（reasoning_content）"),
+        txBlock(m.reasoning_content,h("div",{},longPre(m.reasoning_content,"th",4000))));
+      if(txt)body.append(h("div",{class:"lb"},"回复文本"),txBlock(txt,h("div",{},longPre(txt,"",4000))));
       body.append(...callBlocks(it),judgeBlock(m,sum,tgt),humanStep(it,sum,mk));}
     body.hidden=!o;
   };
@@ -564,7 +645,7 @@ function renderSide(row,sum){
     D([["检查键",q.check_key],["目标步骤",`第 ${q.step} 步 / 共 ${q.n_steps} 步（${q.step_loc}）`],["判定分段",q.judge_split],
        ["同步骤其它Fail",(q.step_fail_items||[]).join("、")]]),
     h("div",{class:"lb"},"机器给出的理由（本检查项）"),
-    h("div",{class:"seg"},q.judge_reason_seg||"—"),
+    txBlock(q.judge_reason_seg||"",h("div",{},h("div",{class:"seg"},q.judge_reason_seg||"—"))),
     q.judge_reason_zh?h("details",{},h("summary",{class:"mut"},"中文翻译"),h("div",{class:"seg"},q.judge_reason_zh)):null,
     h("div",{class:"hum"},h("b",{},"我的结论（对本检查项）"),
       h("div",{class:"btns"},Object.keys(LBL).map((k,i)=>btn[k]=h("button",{class:a.label===k?"sel-"+k:"",onclick:()=>setL(k)},h("kbd",{},i+1)," ",LBL[k]))),
@@ -591,6 +672,16 @@ $("#bExpAll").onclick=()=>expAll();
 $("#bExpJson").onclick=expJson;
 $("#bExpCsv").onclick=expCsv;
 $("#bImp").onclick=()=>$("#fImp").click();
+$("#bTx").onclick=txAll;
+if(typeof Translator==="undefined"){$("#bTx").disabled=true;
+  $("#bTx").title="当前浏览器没有内置的端侧翻译 API，需要 Chrome / Edge 138 及以上（本工具不会把文本发往任何服务器，所以不提供云端翻译兜底）"}
+else Translator.availability({sourceLanguage:"en",targetLanguage:"zh"}).then(av=>{
+  // 开页时就探一次（availability 不需要用户手势），这样点击时能直接 create()，不必先等一次异步
+  TX.av=av;
+  if(av==="unavailable"){$("#bTx").disabled=true;
+    $("#bTx").title="浏览器报告 en→zh 不可用（可能是系统语言或企业策略限制）"}
+  else if(av!=="available")$("#bTx").title="首次点击要先下载 en→zh 语言包（只下一次，之后都在本机跑）。"+$("#bTx").title;
+}).catch(()=>{});
 $("#fImp").onchange=e=>{const f=e.target.files[0];if(f)impAnn(f).catch(err=>status("导入失败："+err.message));e.target.value=""};
 addEventListener("dragover",e=>e.preventDefault());
 addEventListener("drop",e=>{e.preventDefault();pick(e.dataTransfer.files[0])});
