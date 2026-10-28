@@ -3,88 +3,127 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#1f6feb">
 <title>科目一笔记速查卡</title>
 <style>
 :root{
-  --bg:#f6f7f9;--card:#fff;--fg:#17191c;--mut:#6b7280;--bd:#e3e6ea;
-  --ac:#0f766e;--acbg:#e6f4f1;--warn:#b45309;--warnbg:#fff7ed;--bad:#b91c1c;--badbg:#fef2f2;
-  --ok:#15803d;--okbg:#f0fdf4;--sh:0 1px 2px rgba(16,24,40,.06);
+  --bg:#f2f4f7;--card:#fff;--fg:#1b2430;--mut:#5d6b7a;--bd:#e3e8ee;--hair:#f2f5f8;
+  --ac:#1f6feb;--acbg:#eaf1fd;--dot:#c6cfda;
+  /* 分值配色：1/3/6/9/12 分各一色，非记分卡按分类借用同一组色板 */
+  --c1:#54b47a;--c3:#4a9ed8;--c6:#e8a33d;--c9:#e8743d;--c12:#d9465f;
+  --ok:#2f9e5f;--okbg:#eaf7ef;
+  --warn:#9a6514;--warnbg:#fff6e8;--bad:#b02a3d;--badbg:#fff5f6;
+  --sh:0 1px 2px rgba(27,36,48,.06),0 4px 14px rgba(27,36,48,.045);
+  --hbg:rgba(242,244,247,.94);
 }
 @media (prefers-color-scheme:dark){
-  :root{--bg:#111315;--card:#1a1d20;--fg:#e8eaed;--mut:#9aa1a9;--bd:#2d3238;
-    --ac:#5eead4;--acbg:#10302c;--warn:#fbbf24;--warnbg:#2b2210;--bad:#fca5a5;--badbg:#2a1414;
-    --ok:#86efac;--okbg:#122017;--sh:none}
+  :root{--bg:#14171a;--card:#1c2024;--fg:#e6e9ed;--mut:#97a2ae;--bd:#2b3138;--hair:#262c33;
+    --ac:#6aa6ff;--acbg:#16263c;--dot:#4a545f;
+    --ok:#5fcf8d;--okbg:#14291d;
+    --warn:#f0c070;--warnbg:#2b2210;--bad:#f29aa6;--badbg:#2a1517;
+    --sh:none;--hbg:rgba(20,23,26,.94)}
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);
   font:16px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-  padding-bottom:env(safe-area-inset-bottom)}
-header{position:sticky;top:0;z-index:9;background:var(--bg);
-  padding:10px 12px 6px;border-bottom:1px solid var(--bd)}
-h1{margin:0 0 8px;font-size:17px;font-weight:600;display:flex;align-items:center;gap:8px}
-h1 small{font-weight:400;font-size:12px;color:var(--mut)}
+  padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:20;background:var(--hbg);
+  backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);
+  border-bottom:1px solid var(--bd);padding:env(safe-area-inset-top) 0 0}
+.bar{max-width:720px;margin:0 auto;padding:0 16px}
+h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.3px;
+  display:flex;align-items:baseline;gap:8px;padding:12px 0 9px}
+h1 small{font-weight:400;font-size:12px;color:var(--mut);letter-spacing:0}
 .row{display:flex;gap:8px;align-items:center}
-#q{flex:1;min-width:0;font-size:16px;padding:9px 12px;border:1px solid var(--bd);
-  border-radius:10px;background:var(--card);color:var(--fg)}
+#q{flex:1;min-width:0;font:inherit;font-size:15px;padding:8px 14px;border:1px solid var(--bd);
+  border-radius:999px;background:var(--card);color:var(--fg)}
 #q:focus{outline:2px solid var(--ac);outline-offset:-1px}
-.tb{font-size:13px;padding:9px 11px;border:1px solid var(--bd);border-radius:10px;
-  background:var(--card);color:var(--fg);cursor:pointer;white-space:nowrap}
-.tb[aria-pressed=true]{background:var(--acbg);border-color:var(--ac);color:var(--ac);font-weight:600}
-#chips{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
+.tb{font:inherit;font-size:13.5px;font-weight:500;padding:8px 14px;border:1px solid var(--bd);
+  border-radius:999px;background:var(--card);color:var(--mut);cursor:pointer;white-space:nowrap}
+.tb[aria-pressed=true]{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:700}
+#chips{display:flex;gap:7px;overflow-x:auto;padding:9px 16px 11px;scrollbar-width:none;
+  max-width:720px;margin:0 auto}
 #chips::-webkit-scrollbar{display:none}
-.chip{flex:0 0 auto;font-size:13px;padding:6px 12px;border:1px solid var(--bd);
-  border-radius:999px;background:var(--card);color:var(--mut);cursor:pointer}
-.chip[aria-pressed=true]{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
-@media (prefers-color-scheme:dark){.chip[aria-pressed=true]{color:#06211e}}
-#cnt{font-size:12px;color:var(--mut);padding:4px 12px 0}
-main{padding:8px 12px 40px;display:flex;flex-direction:column;gap:10px}
-.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;box-shadow:var(--sh);overflow:hidden}
-.c.done{opacity:.55}
-.ch{display:flex;align-items:flex-start;gap:8px;padding:12px 12px;cursor:pointer}
-.ch h2{margin:0;font-size:15px;font-weight:600;flex:1;line-height:1.5}
-.tag{flex:0 0 auto;font-size:11px;padding:2px 7px;border-radius:6px;
-  background:var(--acbg);color:var(--ac);font-weight:600;margin-top:2px}
-.c.warn .tag{background:var(--warnbg);color:var(--warn)}
-.mk{flex:0 0 auto;width:30px;height:30px;border:1px solid var(--bd);border-radius:8px;
-  background:transparent;color:var(--mut);font-size:15px;cursor:pointer;line-height:1}
+.chip{flex:0 0 auto;font:inherit;font-size:13.5px;font-weight:500;padding:6px 13px;
+  border:1px solid var(--bd);border-radius:999px;background:var(--card);color:var(--mut);
+  cursor:pointer;white-space:nowrap}
+.chip[aria-pressed=true]{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:700}
+#cnt{font-size:12px;color:var(--mut);padding:0 0 10px}
+main{padding:14px 14px 0;max-width:720px;margin:0 auto}
+.g[hidden],.c[hidden]{display:none}
+.gh{margin:24px 2px 11px;font-size:15px;font-weight:700;color:var(--mut);letter-spacing:1.2px}
+.g:first-child .gh{margin-top:2px}
+.c{background:var(--card);border-radius:15px;padding:14px 16px;margin-bottom:11px;
+  box-shadow:var(--sh);border-left:4px solid var(--bd)}
+.c.done{opacity:.5}
+.ch{display:flex;align-items:center;gap:10px;cursor:pointer}
+.ch h3{margin:0;font-size:16.5px;font-weight:700;flex:1;min-width:0;line-height:1.45}
+.pill{flex:0 0 auto;display:inline-block;color:#fff;font-size:12.5px;font-weight:700;
+  border-radius:7px;padding:2px 9px;letter-spacing:.5px;background:var(--ac)}
+.mk{flex:0 0 auto;width:28px;height:28px;border:1px solid var(--bd);border-radius:999px;
+  background:transparent;color:var(--dot);font:inherit;font-size:14px;line-height:1;cursor:pointer}
 .mk[aria-pressed=true]{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
-.cb{padding:0 12px 12px;border-top:1px solid var(--bd);padding-top:10px}
+/* ▾ 在部分中文字体里会落到全角字形上（实测 21px 宽），固定盒宽免得把标题挤出卡片 */
+.chev{flex:0 0 14px;width:14px;text-align:center;overflow:hidden;
+  color:var(--dot);font-size:12px;line-height:1;transition:transform .2s}
+.c.closed .chev{transform:rotate(-90deg)}
+/* 左边框和标签同色：1/3/6/9/12 分一眼能分开，非记分卡按分类取色 */
+.k1{border-left-color:var(--c1)}.k1 .pill{background:var(--c1)}
+.k3{border-left-color:var(--c3)}.k3 .pill{background:var(--c3)}
+.k6{border-left-color:var(--c6)}.k6 .pill{background:var(--c6)}
+.k9{border-left-color:var(--c9)}.k9 .pill{background:var(--c9)}
+.k12{border-left-color:var(--c12)}.k12 .pill{background:var(--c12)}
+.ka{border-left-color:var(--ac)}.ka .pill{background:var(--ac)}
+.cb{margin-top:10px}
 .cb[hidden]{display:none}
-.cb h3{margin:12px 0 6px;font-size:13px;color:var(--mut);font-weight:600}
-.cb h3:first-child{margin-top:0}
-.cb p{margin:0 0 8px}
-.cb ul{margin:0 0 8px;padding-left:1.2em}
-.cb li{margin:3px 0}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0 0 8px;font-size:15px}
-.kv dt{color:var(--mut);white-space:nowrap}
-.kv dd{margin:0;font-weight:500}
-.tw{overflow-x:auto;margin:0 0 8px;-webkit-overflow-scrolling:touch}
-table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
-th{background:var(--acbg);color:var(--ac);font-weight:600;white-space:nowrap}
-td:first-child{white-space:nowrap;color:var(--mut)}
-.no{background:var(--badbg);color:var(--bad);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
-.yes{background:var(--okbg);color:var(--ok);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
-.wn{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
+.cb h4{margin:13px 0 6px;font-size:12.5px;color:var(--mut);font-weight:600;letter-spacing:.6px}
+.cb h4:first-child{margin-top:0}
+.cb p{margin:0 0 8px;font-size:15.5px}
+.cb p:last-child{margin-bottom:0}
+.cb ul{margin:0;padding-left:0;list-style:none}
+.cb li{position:relative;padding:5px 0 5px 15px;font-size:15.5px;border-bottom:1px solid var(--hair)}
+.cb li:last-child{border-bottom:0}
+.cb li::before{content:"";position:absolute;left:1px;top:14px;width:5px;height:5px;
+  border-radius:50%;background:var(--dot)}
+dl{margin:0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:0 12px;margin:0;font-size:15.5px}
+.kv dt{font-weight:700;color:var(--ac);padding:6px 0;border-bottom:1px solid var(--hair)}
+.kv dd{margin:0;padding:6px 0;border-bottom:1px solid var(--hair)}
+.kv dt:last-of-type,.kv dd:last-of-type{border-bottom:0}
+.tw{overflow-x:auto;margin:0 0 2px;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{padding:7px 8px;text-align:left;vertical-align:top;border-bottom:1px solid var(--hair)}
+th{font-size:12.5px;color:var(--mut);font-weight:600;white-space:nowrap}
+td:first-child{font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+/* 单元格里带换行的表（超速那张）：让它横向滚动，而不是把「10~20%：1 分」折成两行 */
+.tw.nw table{width:auto;min-width:100%}
+.tw.nw th,.tw.nw td{white-space:nowrap}
+.no,.yes,.wn{border-radius:10px;padding:9px 11px;margin:9px 0 2px;font-size:14.5px;line-height:1.6}
+.no{background:var(--badbg);color:var(--bad)}
+.yes{background:var(--okbg);color:var(--ok)}
+.wn{background:var(--warnbg);color:var(--warn)}
 .em{font-weight:700;color:var(--ac)}
-#top{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));width:42px;height:42px;
+.no .em,.yes .em,.wn .em{color:inherit}
+#top{position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));width:42px;height:42px;
   border-radius:50%;border:1px solid var(--bd);background:var(--card);color:var(--fg);
-  font-size:17px;box-shadow:0 2px 8px rgba(16,24,40,.14);cursor:pointer;display:none}
+  font:inherit;font-size:17px;box-shadow:0 4px 16px rgba(27,36,48,.18);cursor:pointer;display:none}
 #top.on{display:block}
-footer{padding:0 12px 30px;font-size:12px;color:var(--mut);line-height:1.7}
+footer{max-width:720px;margin:0 auto;padding:16px 16px 30px;font-size:12.5px;color:var(--mut);line-height:1.7}
 </style>
 </head>
 <body>
 <header>
-  <h1>科目一笔记速查卡 <small id="sub">共 0 张</small></h1>
-  <div class="row">
-    <input id="q" type="search" placeholder="搜关键词：超速 / 能见度 / 吊销 / ESP…" aria-label="搜索卡片">
-    <button id="bU" class="tb" aria-pressed="false" title="只看还没标记「记住了」的卡片">未掌握</button>
+  <div class="bar">
+    <h1>科目一笔记速查卡 <small id="sub">点标题展开 · 共 0 张</small></h1>
+    <div class="row">
+      <input id="q" type="search" placeholder="搜关键词：超速 / 能见度 / 吊销 / ESP…" aria-label="搜索卡片">
+      <button id="bU" class="tb" aria-pressed="false" title="只看还没标记「记住了」的卡片">未掌握</button>
+    </div>
   </div>
   <div id="chips" role="group" aria-label="分类筛选"></div>
-  <div id="cnt"></div>
+  <div class="bar"><div id="cnt"></div></div>
 </header>
 <main id="list"></main>
 <footer>
@@ -332,7 +371,7 @@ const rich=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}
   .replace(/\*\*(.+?)\*\*/g,'<b class="em">$1</b>').replace(/\n/g,"<br>");
 function sect(s){
   const out=[];
-  if(s.h)out.push(el("h3",{},s.h));
+  if(s.h)out.push(el("h4",{},s.h));
   if(s.p)out.push(el("p",{html:rich(s.p)}));
   if(s.yes)out.push(el("div",{class:"yes",html:rich(s.yes)}));
   if(s.no)out.push(el("div",{class:"no",html:rich(s.no)}));
@@ -340,26 +379,48 @@ function sect(s){
   if(s.li)out.push(el("ul",{},s.li.map(x=>el("li",{html:rich(x)}))));
   if(s.kv)out.push(el("dl",{class:"kv"},s.kv.map(([k,v])=>[el("dt",{},k),el("dd",{html:rich(v)})])));
   if(s.tbl){const[hd,...rs]=s.tbl;
-    out.push(el("div",{class:"tw"},el("table",{},
+    const nw=s.tbl.some(r=>r.some(x=>/\n/.test(x)))?" nw":"";
+    out.push(el("div",{class:"tw"+nw},el("table",{},
       el("thead",{},el("tr",{},hd.map(x=>el("th",{html:rich(x)})))),
       el("tbody",{},rs.map(r=>el("tr",{},r.map(x=>el("td",{html:rich(x)}))))))));}
   return out;
 }
+// 非记分卡按分类借用同一组分值色板，让整页只有五种主色，不花
+const COL={技巧:"a",速度:"c3",距离:"c1",灯光:"c6",让行:"c1",时间:"c1",
+  超限:"c9",准驾:"c3",罚款:"c9",处罚:"c12",缩写:"c3",存疑:"c12"};
+const SC={1:"c1",3:"c3",6:"c6",9:"c9",12:"c12"};
+function badge(d){
+  // 「记 N 分」这类卡片直接用分值当标签，和原卡片页 1分/3分 的配色对齐
+  const m=/^记\s*(\d+)\s*分$/.exec(d.t);
+  return m?{txt:m[1]+" 分",k:SC[+m[1]]||"a"}:{txt:d.c,k:COL[d.c]||"a"};
+}
 const CARDS=D.map((d,i)=>{
-  const id="k"+i,isW=d.c==="存疑";
+  const id="k"+i,bg=badge(d);
   const body=el("div",{class:"cb",id:id+"b",hidden:"hidden"},d.s.map(sect));
   const mk=el("button",{class:"mk","aria-pressed":done.has(id)?"true":"false",
     "aria-label":"标记记住了",title:"记住了"},"✓");
   const hd=el("div",{class:"ch",role:"button",tabindex:"0","aria-expanded":"false","aria-controls":id+"b"},
-    el("span",{class:"tag"},d.c),el("h2",{},d.t),mk);
-  const card=el("div",{class:"c"+(isW?" warn":"")+(done.has(id)?" done":"")},hd,body);
-  const set=o=>{body.hidden=!o;hd.setAttribute("aria-expanded",o?"true":"false")};
+    el("span",{class:"pill"},bg.txt),el("h3",{},d.t),mk,el("span",{class:"chev","aria-hidden":"true"},"▾"));
+  const card=el("div",{class:"c closed k"+bg.k.replace("c","")+(done.has(id)?" done":"")},hd,body);
+  const set=o=>{body.hidden=!o;card.classList.toggle("closed",!o);
+    hd.setAttribute("aria-expanded",o?"true":"false")};
   hd.onclick=e=>{if(e.target!==mk)set(body.hidden)};
   hd.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();set(body.hidden)}};
   mk.onclick=()=>{const on=!done.has(id);on?done.add(id):done.delete(id);save();
     mk.setAttribute("aria-pressed",on?"true":"false");card.classList.toggle("done",on);refresh()};
   return{d,id,card,set,txt:(d.c+" "+d.t+" "+JSON.stringify(d.s)).toLowerCase()};
 });
+// ===== 按分类分组，每组一个小标题（一 · 技巧） =====
+const cn=n=>n<=10?"一二三四五六七八九十"[n-1]:"十"+"一二三四五六七八九"[n-11];
+const GRP=[];
+{
+  const by=new Map();
+  CARDS.forEach(c=>{(by.get(c.d.c)||by.set(c.d.c,[]).get(c.d.c)).push(c)});
+  let i=0;
+  by.forEach((cs,c)=>{i++;
+    const g=el("section",{class:"g"},el("h2",{class:"gh"},`${cn(i)} · ${c}`),cs.map(x=>x.card));
+    g._cs=cs;GRP.push(g)});
+}
 // ===== 筛选 =====
 let cat="全部",onlyU=false;
 const CATS=["全部",...[...new Set(D.map(d=>d.c))]];
@@ -369,16 +430,18 @@ $("#chips").replaceChildren(...CATS.map(c=>{
   b.onclick=()=>{cat=c;[...$("#chips").children].forEach(x=>x.setAttribute("aria-pressed","false"));
     b.setAttribute("aria-pressed","true");refresh()};
   return b;}));
-$("#list").replaceChildren(...CARDS.map(c=>c.card));
-$("#sub").textContent=`共 ${CARDS.length} 张`;
+$("#list").replaceChildren(...GRP);
+$("#sub").textContent=`点标题展开 · 共 ${CARDS.length} 张`;
 function refresh(){
   const kw=$("#q").value.trim().toLowerCase();
   let n=0;
   CARDS.forEach(c=>{
     const hit=(cat==="全部"||c.d.c===cat)&&(!onlyU||!done.has(c.id))&&(!kw||c.txt.includes(kw));
-    c.card.style.display=hit?"":"none";
+    c.card.hidden=!hit;
     if(hit){n++;if(kw)c.set(true)}        // 搜索命中的卡片直接展开，手机上少点一次
   });
+  // 整组都筛掉了就连小标题一起藏，不留空标题
+  GRP.forEach(g=>{g.hidden=!g._cs.some(c=>!c.card.hidden)});
   const left=CARDS.filter(c=>!done.has(c.id)).length;
   $("#cnt").textContent=(kw?`搜到 ${n} 张`:`显示 ${n} 张`)+` · 还没记住 ${left} 张`;
 }
