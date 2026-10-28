@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>科目一笔记速查卡</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--fg:#17191c;--mut:#6b7280;--bd:#e3e6ea;
+  --ac:#0f766e;--acbg:#e6f4f1;--warn:#b45309;--warnbg:#fff7ed;--bad:#b91c1c;--badbg:#fef2f2;
+  --ok:#15803d;--okbg:#f0fdf4;--sh:0 1px 2px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#111315;--card:#1a1d20;--fg:#e8eaed;--mut:#9aa1a9;--bd:#2d3238;
+    --ac:#5eead4;--acbg:#10302c;--warn:#fbbf24;--warnbg:#2b2210;--bad:#fca5a5;--badbg:#2a1414;
+    --ok:#86efac;--okbg:#122017;--sh:none}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  padding-bottom:env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:9;background:var(--bg);
+  padding:10px 12px 6px;border-bottom:1px solid var(--bd)}
+h1{margin:0 0 8px;font-size:17px;font-weight:600;display:flex;align-items:center;gap:8px}
+h1 small{font-weight:400;font-size:12px;color:var(--mut)}
+.row{display:flex;gap:8px;align-items:center}
+#q{flex:1;min-width:0;font-size:16px;padding:9px 12px;border:1px solid var(--bd);
+  border-radius:10px;background:var(--card);color:var(--fg)}
+#q:focus{outline:2px solid var(--ac);outline-offset:-1px}
+.tb{font-size:13px;padding:9px 11px;border:1px solid var(--bd);border-radius:10px;
+  background:var(--card);color:var(--fg);cursor:pointer;white-space:nowrap}
+.tb[aria-pressed=true]{background:var(--acbg);border-color:var(--ac);color:var(--ac);font-weight:600}
+#chips{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;font-size:13px;padding:6px 12px;border:1px solid var(--bd);
+  border-radius:999px;background:var(--card);color:var(--mut);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
+@media (prefers-color-scheme:dark){.chip[aria-pressed=true]{color:#06211e}}
+#cnt{font-size:12px;color:var(--mut);padding:4px 12px 0}
+main{padding:8px 12px 40px;display:flex;flex-direction:column;gap:10px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;box-shadow:var(--sh);overflow:hidden}
+.c.done{opacity:.55}
+.ch{display:flex;align-items:flex-start;gap:8px;padding:12px 12px;cursor:pointer}
+.ch h2{margin:0;font-size:15px;font-weight:600;flex:1;line-height:1.5}
+.tag{flex:0 0 auto;font-size:11px;padding:2px 7px;border-radius:6px;
+  background:var(--acbg);color:var(--ac);font-weight:600;margin-top:2px}
+.c.warn .tag{background:var(--warnbg);color:var(--warn)}
+.mk{flex:0 0 auto;width:30px;height:30px;border:1px solid var(--bd);border-radius:8px;
+  background:transparent;color:var(--mut);font-size:15px;cursor:pointer;line-height:1}
+.mk[aria-pressed=true]{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
+.cb{padding:0 12px 12px;border-top:1px solid var(--bd);padding-top:10px}
+.cb[hidden]{display:none}
+.cb h3{margin:12px 0 6px;font-size:13px;color:var(--mut);font-weight:600}
+.cb h3:first-child{margin-top:0}
+.cb p{margin:0 0 8px}
+.cb ul{margin:0 0 8px;padding-left:1.2em}
+.cb li{margin:3px 0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0 0 8px;font-size:15px}
+.kv dt{color:var(--mut);white-space:nowrap}
+.kv dd{margin:0;font-weight:500}
+.tw{overflow-x:auto;margin:0 0 8px;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--acbg);color:var(--ac);font-weight:600;white-space:nowrap}
+td:first-child{white-space:nowrap;color:var(--mut)}
+.no{background:var(--badbg);color:var(--bad);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
+.yes{background:var(--okbg);color:var(--ok);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
+.wn{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:14px}
+.em{font-weight:700;color:var(--ac)}
+#top{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));width:42px;height:42px;
+  border-radius:50%;border:1px solid var(--bd);background:var(--card);color:var(--fg);
+  font-size:17px;box-shadow:0 2px 8px rgba(16,24,40,.14);cursor:pointer;display:none}
+#top.on{display:block}
+footer{padding:0 12px 30px;font-size:12px;color:var(--mut);line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <h1>科目一笔记速查卡 <small id="sub">共 0 张</small></h1>
+  <div class="row">
+    <input id="q" type="search" placeholder="搜关键词：超速 / 能见度 / 吊销 / ESP…" aria-label="搜索卡片">
+    <button id="bU" class="tb" aria-pressed="false" title="只看还没标记「记住了」的卡片">未掌握</button>
+  </div>
+  <div id="chips" role="group" aria-label="分类筛选"></div>
+  <div id="cnt"></div>
+</header>
+<main id="list"></main>
+<footer>
+  点卡片标题展开/收起，右侧 ✓ 标记「记住了」（存在本机浏览器里，不上传）。<br>
+  内容整理自一份科目一笔记，<b>记分和罚款数字请以「交管12123」或官方题库为准</b>——
+  笔记原文有几处自相矛盾，已单独放进「存疑」分类。
+</footer>
+<button id="top" title="回到顶部" aria-label="回到顶部">↑</button>
+<script>
+"use strict";
+const D=[];
+D.push(
+{c:"技巧",t:"选项里这些词，基本是对的",s:[
+  {p:"选择题拿不准时，优先选带下面这些词的选项。"},
+  {kv:[["禁止类","不准、不得、不应、不能、严禁、禁止、应当"],
+    ["让行类","减速让行、停车让行、礼让通行、减速避让、停车避让"],
+    ["慢速类","缓慢通过、减速、平稳、逐渐、匀速下降"],
+    ["观察类","提前观察、仔细观察、认真观察、瞭望"],
+    ["安全类","间断轻踏、保证安全、确保安全、安全通过"],
+    ["其他","双手紧握方向盘、利用发动机制动减速、承担民事责任"]]},
+  {wn:"不符合这套规律的题，要单独拎出来背。"}]},
+{c:"技巧",t:"选项里这些词，基本是错的",s:[
+  {no:"**急、猛、迅速、紧急制动、急转**"},
+  {li:["判断题见到这几个词，直接判错","打滑、爆胎题绝对不选「急」「猛」「迅速」"]}]},
+{c:"技巧",t:"标志配色怎么对应选项",s:[
+  {kv:[["黄底黑边三角","警告标志 → 选项多是「注意……」"],
+    ["蓝底圆形","指示标志 → 必须/允许这样做"],
+    ["红圈","禁令标志 → 不准这样做"]]}]},
+{c:"技巧",t:"扣车还是吊证？看是车的问题还是人的问题",s:[
+  {kv:[["车有问题 → 扣车","伪造、变造与车有关的证件、牌号；未放置保险标志"],
+    ["人有问题 → 吊销驾驶证","伪造变造与驾驶有关的证件；严重违法（如饮酒）；驾驶拼改装或报废车；未携带证件"]]},
+  {p:"罚款档位出现频率：**20~200 元**最高，**200~2000 元**次之。"}]},
+);
+D.push(
+{c:"速度",t:"普通道路限速（没有限速标志时）",s:[
+  {tbl:[["道路条件","城市道路","公路"],
+    ["没有道路中心线","**30**","**40**"],
+    ["有中心线，同方向 1 条车道","**50**","**70**"],
+    ["有中心线，同方向 2 条以上","60","90"]]},
+  {wn:"最后一行出处可疑，见「存疑」里那条——实际开车一律看限速标志。"}]},
+{c:"速度",t:"高速公路车道与车速",s:[
+  {p:"最高 **120**，最低 **60**，超车一律从左侧。"},
+  {tbl:[["车道数","最右","中间","最左"],
+    ["同方向 2 条","60~100","—","100~120"],
+    ["同方向 3 条以上","60~90","90~110","110~120"]]},
+  {wn:"道路限速标志与上面不一致时，以标志为准。"}]},
+{c:"速度",t:"题目没说高速，限速基本选 30",s:[
+  {p:"下面这些场景车速都不准超过 **30 km/h**："},
+  {li:["驶入、驶出非机动车道","通过铁路道口","急弯路、窄桥、狭窄路面","下陡坡",
+    "掉头、转弯","牵引故障车"]}]},
+{c:"速度",t:"高速能见度三档（261 / 145 / 52离）",s:[
+  {tbl:[["能见度","灯光","车速","车距"],
+    ["<200 m","雾灯+近光+示廓灯+前后位灯","≤**60**","≥**100** m"],
+    ["<100 m","上述 + 危险报警闪光灯","≤**40**","≥**50** m"],
+    ["<50 m","上述 + 危险报警闪光灯","≤**20**","尽快从最近出口驶离"]]},
+  {p:"口诀：**2-6-1、1-4-5、5-2-离**。"}]},
+);
+D.push(
+{c:"距离",t:"禁停距离：站 3 口 5",s:[
+  {kv:[["30 m 内禁停","公交站、急救站、加油站、消防栓或消防队（站）门前"],
+    ["50 m 内禁停","交叉路口、铁路道口、急弯路、窄路、桥梁、陡坡、隧道"]]},
+  {p:"口诀：**站 3 口 5**——有「站」的 30 米，路口类的 50 米。"}]},
+{c:"距离",t:"其他要记的距离",s:[
+  {kv:[["驶出高速","提前 **500 m** 做准备"],
+    ["故障设警告标志（普通公路）","车后 **50~100 m**"],
+    ["故障设警告标志（高速公路）","车后 **150 m** 外"],
+    ["夜间会车","**150 m** 内改近光灯"]]}]},
+{c:"灯光",t:"危险报警闪光灯用在哪",s:[
+  {li:["临时停车","紧急停车","能见度低的恶劣天气（雨、雾）下行车","被牵引"]}]},
+{c:"灯光",t:"远光还是近光",s:[
+  {kv:[["窄路、窄桥、会车","近光灯"],
+    ["夜间无路灯或照明不良","车速 <30 用近光，>30 用远光"],
+    ["有路灯、照明良好","一律近光灯"]]},
+  {wn:"「<30 近光、>30 远光」只在**没有路灯/照明不良**时成立，笔记原文漏了这个前提。"}]},
+{c:"让行",t:"让行与先行原则",s:[
+  {li:["转弯让直行","无信号交叉路口，让右方来车先行",
+    "**相对方向**行驶时，右转弯让左转弯先行",
+    "安全的让危险的先行、无障碍的一方先行","行人在人行横道上 → 停车礼让"]},
+  {wn:"「右转让左转」的前提是两车**相对方向**同时转弯，不是通用原则，别套到同方向或交叉方向的题上。"}]},
+{c:"时间",t:"连续驾驶与休息（420）",s:[
+  {p:"连续驾驶 **4 小时**须休息 **20 分钟**以上。"},
+  {kv:[["货车超时","记 3 分"],["危险品运输车超时","记 9 分"]]},
+  {p:"口诀：**420**、**货3危9**。"}]},
+);
+D.push(
+{c:"记分",t:"记 12 分",s:[
+  {li:["饮酒后驾驶","致人轻伤以上或死亡的事故后逃逸，尚不构成犯罪",
+    "伪造、变造，或使用其他车辆的号牌、行驶证、驾驶证",
+    "代替他人接受处罚和记分，牟取经济利益",
+    "高速/城市快速路超速 **50%** 以上；校车、客运、危险品车超速 **20%** 以上",
+    "高速公路倒车、逆行、穿越中央分隔带掉头",
+    "超载 **100%** 以上（所有车型）；校车、客车、危险品车超载 **20%** 以上"]},
+  {p:"口诀：**高速普 5、危 2**（高速上普通车超 50%、危险品车超 20% 都是 12 分）。"}]},
+{c:"记分",t:"记 9 分",s:[
+  {li:["号牌相关（伪造、变造、使用其他号牌）",
+    "中型以上客货车、校车、危险品车在高速公路违停",
+    "驾驶证与准驾车型不符","未取得校车驾驶资格驾驶校车",
+    "载客车、危险品车超载 20% 以上","7 座车超载 50% 以上",
+    "校车/客车/危险品车超速 50% 以上"]}]},
+{c:"记分",t:"记 6 分",s:[
+  {li:["闯红灯、违反道路交通信号灯通行","占用应急车道",
+    "驾驶证暂扣期间驾车","造成致人轻伤或财产损失的事故",
+    "危险品运输车未按指定路线行驶、未悬挂警示标志","超重 50% 以上",
+    "超载：校车/客车 <20%；7 座 20%~50%","超速：高速 <50%；校车/客车/危险品车 20%~50%"]}]},
+{c:"记分",t:"记 3 分",s:[
+  {li:["开车打电话","不避让校车、不避让行人","不按规定超车、让行、减速",
+    "故障后不按规定设置警告标志、不按规定使用灯光","不按规定安装号牌",
+    "普通路逆行","高速不按规定车道行驶、低于最低时速","强行占道穿插",
+    "连续驾驶超时（420）","超重 30%~50%；普通货车超载 30%~50%；超速 20%~50%"]}]},
+{c:"记分",t:"记 1 分",s:[
+  {li:["不按规定使用灯光","不系安全带","不按规定会车、倒车、掉头",
+    "违反禁令标志","不按规定参加年检","驾驶擅自改装的车",
+    "超长、超宽、超高","普通车/危险品车超速 10%~20%"]}]},
+{c:"记分",t:"记分周期与驾驶证有效期",s:[
+  {kv:[["记分周期","12 个月"],["满 12 分","重新学习并考科目一"],
+    ["驾驶证有效期","6 年、10 年、长期，到期审验"]]}]},
+);
+D.push(
+{c:"超限",t:"超重（货物）",s:[
+  {tbl:[["超重比例","记分"],["<30%","1 分"],["30%~50%","3 分"],[">50%","6 分"]]}]},
+{c:"超限",t:"超载（人数）",s:[
+  {tbl:[["车型","比例","记分"],
+    ["校车、客车","<20%","6 分"],["校车、客车","≥20%","**12 分**"],
+    ["7 座车","<50%","6 分"],["7 座车","50%~100%","9 分"],["7 座车",">100%","**12 分**"],
+    ["普通货车","≤50%","3 分"],["普通货车",">50%","6 分"]]},
+  {wn:"这张表按「同分值合并」整理过。笔记原文里 7 座和普通货车有两行同分的重复分档，疑似抄漏了一档。"},
+  {p:"口诀：**校客 20 → 6**（校车客车超 20% 以内 6 分，超了就 12 分）。"}]},
+{c:"超限",t:"超速",s:[
+  {tbl:[["车型","普通路","高速 / 城市快速路"],
+    ["普通车","10~20%：1 分\n20~50%：3 分\n>50%：6 分","<50%：6 分\n>50%：**12 分**"],
+    ["校车/客车/危险品车","10~20%：1 分\n20~50%：6 分\n>50%：9 分","<20%：6 分\n>20%：**12 分**"]]},
+  {wn:"笔记里「普通车普通路 20~50%」一处写 3 分、一处写 6 分，自相矛盾，考前务必核对。"}]},
+{c:"准驾",t:"准驾车型代号",s:[
+  {tbl:[["代号","车型"],["A1","大型客车"],["A2","重型牵引挂车"],
+    ["B1","中型客车"],["B2","大型货车"],["C1","手动挡小型汽车"],["C2","自动挡小型汽车"],
+    ["C3","低速载货汽车"],["C4","三轮汽车"],["C6","轻型牵引挂车"],["M","轮式专用机械车"]]}]},
+);
+D.push(
+{c:"罚款",t:"罚款档位一览",s:[
+  {tbl:[["档位","典型情形"],
+    ["200 元以下","转让后未办理转让登记；号牌不清晰"],
+    ["20~200 元","继续使用原驾驶证（收回原证）；实习期驾车不符合规定；实习期驾驶公共汽车或载危险品车；实习期牵引挂车；未及时申报变更信息"],
+    ["200~500 元","暂扣期间以隐瞒欺骗手段补领；身体不适仍驾车；逾期不参加审验（并收回驾驶证）"],
+    ["200~2000 元","无证/证被吊销/暂扣期间驾车；把车交给无证或被吊销暂扣的人（并吊销其证）；事故逃逸尚不构成犯罪；超速 50% 以上（吊销）；强迫驾驶人违法致事故；违反交通管制强行通行不听劝阻；故意损毁移动涂改交通设施；非法拦截扣留车辆造成严重阻塞或较大财产损失"],
+    ["2000~5000 元","伪造变造登记证书、号牌、行驶证、驾驶证（扣留车辆，并处 15 日以下拘留）"],
+    ["驾驶报废车","200~2000 元，吊销驾驶证，车辆报废"]]},
+  {wn:"200~2000 元这一档里多条可并处 **15 日以下拘留**。"}]},
+{c:"罚款",t:"另一套数字：驾驶证申领使用规定（别和上面混）",s:[
+  {kv:[["隐瞒、虚假","500 元以下"],["贿赂、舞弊","2000 元以下"],
+    ["「假一骗三」","2000 元以下"],
+    ["组织、参与并牟取经济利益","按违法所得 3~5 倍罚款，最高不超过 10 万元"]]},
+  {wn:"这些出自《机动车驾驶证申领和使用规定》，和《道交法》的 20~200 / 200~2000 不是一个体系。"}]},
+{c:"处罚",t:"吊销驾驶证的情形",s:[
+  {li:["超速 50% 以上","借车给无证的人","非法改装","驾驶报废车",
+    "无理由逾期不接受处理","两次酒驾被抓"]}]},
+{c:"处罚",t:"吊销后重新申请：吊二撤三醉五逃终生",s:[
+  {tbl:[["情形","等待时间"],["驾驶证被吊销","2 年"],["被依法撤销","3 年"],
+    ["醉酒驾驶被吊销","5 年"],["醉驾**营运车辆**被吊销","10 年"],
+    ["事故逃逸构成犯罪","终生不得再申请"]]},
+  {wn:"营运车醉驾的 10 年，笔记原文漏了，这一条考试爱出。"}]},
+{c:"处罚",t:"扣车与拘留",s:[
+  {kv:[["扣车","无牌、无合格或保险标志、无证（看清问的是行驶证还是驾驶证）、伪造证件、记满 12 分"],
+    ["号牌没挂好","警告"],["号牌伪造假冒","收缴"],
+    ["拘留 15 日","驾驶证无效（吊销或暂扣期间）驾车；事故逃逸但不构成犯罪"]]}]},
+{c:"处罚",t:"事故刑责",s:[
+  {tbl:[["情形","量刑"],["违反交规致重大伤亡（未逃逸）","3 年以下"],
+    ["逃逸但未致人死亡","3 年以上 7 年以下"],["撞死人后逃逸","3~7 年"],
+    ["因逃逸致人死亡","7 年以上"]]}]},
+);
+D.push(
+{c:"缩写",t:"辅助系统缩写全表",s:[
+  {tbl:[["缩写","全称","中文"],
+    ["AEB","Autonomous Emergency Braking","自动紧急制动"],
+    ["ACC","Adaptive Cruise Control","自适应巡航"],
+    ["ALC","Auto Lane Change","自动变道辅助"],
+    ["AFS","Adaptive Front-lighting System","自适应（随动转向）前照灯"],
+    ["BSA","Blind Spot Assist","盲点辅助"],
+    ["BSD","Blind Spot Detection","盲点监测"],
+    ["CCS","Cruise Control System","定速巡航"],
+    ["EBA","Electronic Brake Assist","电子制动辅助"],
+    ["EBD","Electronic Brake-force Distribution","电子制动力分配"],
+    ["ESP","Electronic Stability Program","车身电子稳定"],
+    ["FCW","Front Collision Warning","前方碰撞预警"],
+    ["GPS","Global Positioning **System**","导航定位"],
+    ["LDW","Lane Departure Warning","车道偏离预警"],
+    ["TCS / ASR / TRC","Traction Control System","牵引力控制"],
+    ["TMC","Traffic Message **Channel**","实时交通信息（辅助导航）"],
+    ["TSR","Traffic Sign Recognition","交通标志识别"]]}]},
+{c:"缩写",t:"按字母记缩写",s:[
+  {kv:[["A","Auto / Adaptive / Assist"],["B","Blind（盲点）/ Brake（制动）"],
+    ["C","Cruise / Control / Change / Collision / Channel"],
+    ["D","Departure / Distribution / Detection"],
+    ["F","Front / Front-lighting"],
+    ["S","Sign、Stability 在中间（TSR、ESP）；System 在末尾（GPS、TCS、AFS、CCS）"]]},
+  {p:"还有一条：**CC 在前是定速，CC 在后是巡航**（CCS / ACC）。"}]},
+);
+D.push(
+{c:"存疑",t:"① 超速扣分自相矛盾（最该先查）",s:[
+  {p:"笔记第三节表格：普通车普通路 20%~50% → **3 分**。\n笔记第四节「扣6分」清单：普 20~50 → **6 分**。"},
+  {no:"两处不能同时成立，考前必须定下来一个。"}]},
+{c:"存疑",t:"② 超载表有重复分档",s:[
+  {p:"原文「7 座 <20%：6分 / 20%~50%：6分」和「普通货车 <20%：3分 / 20%~50%：3分」，同一分值写了两行。"},
+  {no:"说明抄的时候漏了一档，或者档位边界记错了。"}]},
+{c:"存疑",t:"③「同方向 2 条以上车道 城市60/公路90」出处可疑",s:[
+  {p:"《道路交通安全法实施条例》第45条（无限速标志时）我印象里只规定两种情形：无中心线 30/40，同方向 1 条车道 50/70，没有第三档。"},
+  {wn:"这条可能是教材的延伸说法。实际驾驶一律看限速标志。"}]},
+{c:"存疑",t:"④ 远近光那条缺前提",s:[
+  {p:"「<30 用近光、>30 用远光」只适用于**没有路灯或照明不良**的道路。"},
+  {no:"有路灯、照明良好的路段一律用近光灯——漏了前提会答错。"}]},
+{c:"存疑",t:"⑤「右转让左转」不是通用原则",s:[
+  {p:"成立前提是**相对方向行驶**的两车同时转弯。"},
+  {no:"写成一句光秃秃的口诀，遇到「同方向」「交叉方向」的题容易套错。"}]},
+{c:"存疑",t:"⑥ GPS 全称写错了",s:[
+  {p:"笔记写 Global Positioning **Channel**，正确是 Global Positioning **System**。"},
+  {wn:"Channel 属于 TMC（Traffic Message Channel），两个混到一起了。"}]},
+{c:"存疑",t:"⑦ AEB 全称不规范",s:[
+  {p:"通行写法是 **Autonomous**（或 Automatic）**Emergency Braking**，不是 Auto Emergency Brake。"}]},
+{c:"存疑",t:"⑧「醉酒 → 记 12 分」容易误导",s:[
+  {p:"2022 新规里记 12 分的是**饮酒后驾驶**。"},
+  {wn:"醉驾属于犯罪：吊销 + 刑事责任 + 5 年内不得重新申请（营运车 10 年），记分不是重点。"}]},
+{c:"存疑",t:"⑨「吊二撤三醉五逃终生」漏了营运车",s:[
+  {p:"营运车辆醉驾吊销后是 **10 年**，考试会专门出这个。"}]},
+{c:"存疑",t:"⑩ 两套罚款体系混在一起了",s:[
+  {p:"「假一骗三」「500 以下 / 2000 以下 / 违法所得 3~5 倍、最高 10 万」出自《机动车驾驶证申领和使用规定》。"},
+  {wn:"和《道交法》的 20~200 / 200~2000 不是一回事，本卡片里已分开放两张。"}]},
+{c:"存疑",t:"⑪ 原文有截断和错别字",s:[
+  {li:["「扣9分」里「超速校客危>50%、普通路……」后半句缺失",
+    "「违返交规」应为违反、「紧止」应为禁止"]}]},
+{c:"存疑",t:"⑫ 这些数字有时效性",s:[
+  {p:"记分部分对应 **2022-04-01** 施行的《道路交通安全违法行为记分管理办法》（公安部令第163号）。"},
+  {no:"整理时没能访问中文官方源核对是否有更新，记分和罚款的具体分档请用「交管12123」或官方题库再对一遍，尤其是 ①②③。"}]},
+);
+// ===== 渲染 =====
+const $=s=>document.querySelector(s);
+const el=(t,a,...k)=>{const n=document.createElement(t);
+  for(const p in a||{})p==="html"?n.innerHTML=a[p]:n.setAttribute(p,a[p]);
+  // flat(Infinity)：sect() 返回的是数组，卡片体又是数组的数组，少拍平一层就会把数组
+  // 直接 append 成「[object HTMLDivElement]」这样的文本
+  k.flat(Infinity).forEach(x=>x!=null&&x!==false&&n.append(x));return n};
+const KEY="kemu1.done";
+const done=new Set(JSON.parse(localStorage.getItem(KEY)||"[]"));
+const save=()=>localStorage.setItem(KEY,JSON.stringify([...done]));
+// 行内只允许两种标记：**加重** 和 换行，避免把整段笔记当 HTML 塞进页面
+const rich=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))
+  .replace(/\*\*(.+?)\*\*/g,'<b class="em">$1</b>').replace(/\n/g,"<br>");
+function sect(s){
+  const out=[];
+  if(s.h)out.push(el("h3",{},s.h));
+  if(s.p)out.push(el("p",{html:rich(s.p)}));
+  if(s.yes)out.push(el("div",{class:"yes",html:rich(s.yes)}));
+  if(s.no)out.push(el("div",{class:"no",html:rich(s.no)}));
+  if(s.wn)out.push(el("div",{class:"wn",html:rich(s.wn)}));
+  if(s.li)out.push(el("ul",{},s.li.map(x=>el("li",{html:rich(x)}))));
+  if(s.kv)out.push(el("dl",{class:"kv"},s.kv.map(([k,v])=>[el("dt",{},k),el("dd",{html:rich(v)})])));
+  if(s.tbl){const[hd,...rs]=s.tbl;
+    out.push(el("div",{class:"tw"},el("table",{},
+      el("thead",{},el("tr",{},hd.map(x=>el("th",{html:rich(x)})))),
+      el("tbody",{},rs.map(r=>el("tr",{},r.map(x=>el("td",{html:rich(x)}))))))));}
+  return out;
+}
+const CARDS=D.map((d,i)=>{
+  const id="k"+i,isW=d.c==="存疑";
+  const body=el("div",{class:"cb",id:id+"b",hidden:"hidden"},d.s.map(sect));
+  const mk=el("button",{class:"mk","aria-pressed":done.has(id)?"true":"false",
+    "aria-label":"标记记住了",title:"记住了"},"✓");
+  const hd=el("div",{class:"ch",role:"button",tabindex:"0","aria-expanded":"false","aria-controls":id+"b"},
+    el("span",{class:"tag"},d.c),el("h2",{},d.t),mk);
+  const card=el("div",{class:"c"+(isW?" warn":"")+(done.has(id)?" done":"")},hd,body);
+  const set=o=>{body.hidden=!o;hd.setAttribute("aria-expanded",o?"true":"false")};
+  hd.onclick=e=>{if(e.target!==mk)set(body.hidden)};
+  hd.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();set(body.hidden)}};
+  mk.onclick=()=>{const on=!done.has(id);on?done.add(id):done.delete(id);save();
+    mk.setAttribute("aria-pressed",on?"true":"false");card.classList.toggle("done",on);refresh()};
+  return{d,id,card,set,txt:(d.c+" "+d.t+" "+JSON.stringify(d.s)).toLowerCase()};
+});
+// ===== 筛选 =====
+let cat="全部",onlyU=false;
+const CATS=["全部",...[...new Set(D.map(d=>d.c))]];
+$("#chips").replaceChildren(...CATS.map(c=>{
+  const n=D.filter(d=>c==="全部"||d.c===c).length;
+  const b=el("button",{class:"chip","aria-pressed":c===cat?"true":"false"},`${c} ${n}`);
+  b.onclick=()=>{cat=c;[...$("#chips").children].forEach(x=>x.setAttribute("aria-pressed","false"));
+    b.setAttribute("aria-pressed","true");refresh()};
+  return b;}));
+$("#list").replaceChildren(...CARDS.map(c=>c.card));
+$("#sub").textContent=`共 ${CARDS.length} 张`;
+function refresh(){
+  const kw=$("#q").value.trim().toLowerCase();
+  let n=0;
+  CARDS.forEach(c=>{
+    const hit=(cat==="全部"||c.d.c===cat)&&(!onlyU||!done.has(c.id))&&(!kw||c.txt.includes(kw));
+    c.card.style.display=hit?"":"none";
+    if(hit){n++;if(kw)c.set(true)}        // 搜索命中的卡片直接展开，手机上少点一次
+  });
+  const left=CARDS.filter(c=>!done.has(c.id)).length;
+  $("#cnt").textContent=(kw?`搜到 ${n} 张`:`显示 ${n} 张`)+` · 还没记住 ${left} 张`;
+}
+$("#q").oninput=refresh;
+$("#bU").onclick=()=>{onlyU=!onlyU;$("#bU").setAttribute("aria-pressed",onlyU?"true":"false");refresh()};
+addEventListener("scroll",()=>$("#top").classList.toggle("on",scrollY>400));
+$("#top").onclick=()=>scrollTo({top:0,behavior:"smooth"});
+refresh();
+</script>
+</body>
+</html>
