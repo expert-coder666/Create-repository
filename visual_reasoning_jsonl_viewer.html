@@ -16,11 +16,11 @@ main{min-width:0;padding:20px;overflow:auto}.empty{max-width:720px;margin:8vh au
 </style>
 </head>
 <body>
-<header><h1>🖼️ 视觉推理 JSONL 查看器</h1><button class="btn primary" id="pick">选择 JSONL 文件</button><input id="file" type="file" accept=".jsonl,.json,.txt,application/json,text/plain" hidden><span id="fileInfo" class="stat">数据仅在本浏览器内解析，不会上传。</span><span class="grow"></span><span id="loadInfo" class="stat"></span></header>
+<header><h1>🧭 JSONL 轨迹查看器</h1><button class="btn primary" id="pick">选择 JSONL 文件</button><input id="file" type="file" accept=".jsonl,.json,.txt,application/json,text/plain" hidden><span id="fileInfo" class="stat">数据仅在本浏览器内解析，不会上传。</span><span class="grow"></span><span id="loadInfo" class="stat"></span></header>
 <div id="layout"><aside id="sidebar" class="hidden"><div class="filters"><input id="search" type="search" placeholder="搜索 ID、题型、题目、答案…"><div class="filter-row"><select id="category"><option value="">全部题型</option></select><select id="status"><option value="">全部评测状态</option><option value="true">正确</option><option value="false">错误</option><option value="unknown">未评测</option></select></div><button id="clear" class="btn">清除筛选</button><span id="filterInfo" class="stat"></span></div><div id="recordList"></div></aside><main id="main"><div id="drop" class="empty drop"><h2>加载视觉推理数据</h2><p>拖入 <b>.jsonl</b> 文件，或点击上方“选择 JSONL 文件”。</p><p class="hint">支持本数据集的 data_id、category、题目图片、参考答案、模型作答、推理过程、工具和元数据字段。</p></div></main></div>
 <script>
 'use strict';
-const $=s=>document.querySelector(s),state={records:[],filtered:[],selected:-1,errors:[],file:null,tab:'overview'};
+const $=s=>document.querySelector(s),state={records:[],filtered:[],selected:-1,errors:[],file:null,tab:'conversation'};
 const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v),text=v=>v==null?'—':typeof v==='string'?v:JSON.stringify(v),pick=(o,path,fallback)=>{try{const v=path.reduce((x,k)=>x?.[k],o);return v??fallback}catch{return fallback}},escapeText=s=>String(s??'');
 const candidate=o=>{let c=pick(o,['candidates'],[]);while(Array.isArray(c)&&c.length)c=c[0];return isObj(c)?c:{}};
 function messagesFor(raw){const prompt=Array.isArray(raw.prompt)?raw.prompt:Array.isArray(raw.messages)?raw.messages:[];return prompt.filter(isObj)}
