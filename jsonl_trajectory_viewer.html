@@ -127,6 +127,13 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Pi
 .btag{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--panel);border:1px solid var(--border);
   border-radius:6px;padding:2px 7px;color:var(--text)}
 .mbody{padding:10px 12px}
+.msg-field{margin:6px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.msg-field>summary{padding:6px 10px;cursor:pointer;user-select:none;color:var(--muted);font-size:12px;font-weight:600;background:var(--chip)}
+.msg-field>summary:hover{background:var(--hover)}
+.msg-field[open]>summary{border-bottom:1px solid var(--border)}
+.msg-field-body{padding:7px 10px}
+.msg-field-body>.txt:first-child{margin-top:0}
+.msg-field-body>.txt:last-child{margin-bottom:0}
 .blk{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:12.5px;background:var(--code-bg);border-radius:6px;padding:9px 11px;margin:6px 0;overflow-x:auto}
 .txt{white-space:pre-wrap;word-break:break-word;margin:4px 0}
@@ -914,17 +921,33 @@ function renderMsg(msg,i,lab){
     + `<span class="spacer"></span>`
     + (msg.is_restore?`<span class="mi">restore</span>`:'')
     + `</div><div class="mbody">`;
-  const reason = msg.reasoning_content;
-  if(reason && String(reason).trim()){
-    html += `<details class="reason"><summary>💭 思考过程 (${String(reason).length} 字)</summary>`
-      + `<div class="blk">${esc(reason)}</div>` + transBlock(reason) + `</details>`;
+
+  const has = key => Object.prototype.hasOwnProperty.call(msg,key);
+  if(has('reasoning_content')){
+    const reason = msg.reasoning_content==null ? '' : String(msg.reasoning_content);
+    html += `<details class="msg-field"><summary>reasoning_content${reason ? ` (${reason.length} 字)` : ''}</summary>`
+      + `<div class="msg-field-body"><div class="blk">${esc(reason)}</div>${transBlock(reason)}</div></details>`;
   }
-  html += contentToHtml(msg.content);
-  (msg.tool_calls||[]).forEach(tc=>{
-    const a = tc.arguments!=null ? tc.arguments : (tc.function && tc.function.arguments);
-    const args = (typeof a==='string')? a : pj(a);
-    html += `<div class="tc"><div class="tch">🔧 调用 <code>${esc(tc.name||tc.function&&tc.function.name)}</code></div>`
-      + `<pre class="raw">${esc(args)}</pre></div>`;
+  if(has('content')){
+    html += `<details class="msg-field" open><summary>content</summary>`
+      + `<div class="msg-field-body">${contentToHtml(msg.content)||'<span class="stat">空</span>'}</div></details>`;
+  }
+  if(has('tool_calls')){
+    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    html += `<details class="msg-field"><summary>tool_calls (${calls.length})</summary><div class="msg-field-body">`;
+    if(calls.length){
+      calls.forEach(tc=>{
+        const fn = tc.function||{};
+        const name = tc.name||fn.name||tc.type||'tool';
+        const a = tc.arguments!=null ? tc.arguments : fn.arguments;
+        const args = typeof a==='string' ? a : pj(a);
+        html += `<div class="tc"><div class="tch">🔧 <code>${esc(name)}</code></div><pre class="raw">${esc(args)}</pre></div>`;
+      });
+    }else html += '<span class="stat">[]</span>';
+    html += '</div></details>';
+  }
+  Object.keys(msg).filter(key=>!['role','reasoning_content','content','tool_calls','is_restore'].includes(key)).forEach(key=>{
+    html += `<details class="msg-field"><summary>${esc(key)}</summary><div class="msg-field-body"><pre class="raw">${esc(pj(msg[key]))}</pre></div></details>`;
   });
   html += `</div>`;
   el.innerHTML = html;
